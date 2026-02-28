@@ -190,7 +190,7 @@
             <div class="ov-icon">📈</div>
             <div class="ov-text">Select a stock to view chart</div>
           </div>
-          <canvas id="drawing-canvas" style="position:absolute;top:0;left:0;pointer-events:none;z-index:5;"></canvas>
+          <canvas id="drawing-canvas" style="position:absolute;top:0;left:0;pointer-events:none;z-index:20;"></canvas>
           <div id="text-input-container" style="display:none;position:absolute;z-index:10;"></div>
           <div id="measure-tooltip" style="display:none;position:absolute;z-index:10;background:rgba(15,15,24,0.95);border:1px solid var(--accent);border-radius:6px;padding:8px 12px;font-family:'Space Mono',monospace;font-size:11px;pointer-events:none;"></div>
         </div>
@@ -428,16 +428,18 @@ async function renderChart(){
 
   try{
     // Main price series
+    let mainSeries;
     if(ct==='candlestick'){
-      const sr=chart.addCandlestickSeries({upColor:up,downColor:dn,borderUpColor:up,borderDownColor:dn,wickUpColor:up,wickDownColor:dn});
-      sr.setData(norm);
+      mainSeries=chart.addCandlestickSeries({upColor:up,downColor:dn,borderUpColor:up,borderDownColor:dn,wickUpColor:up,wickDownColor:dn});
+      mainSeries.setData(norm);
     }else if(ct==='line'){
-      const sr=chart.addLineSeries({color:up,lineWidth:2,crosshairMarkerRadius:4});
-      sr.setData(norm.map(d=>({time:d.time,value:d.close})));
+      mainSeries=chart.addLineSeries({color:up,lineWidth:2,crosshairMarkerRadius:4});
+      mainSeries.setData(norm.map(d=>({time:d.time,value:d.close})));
     }else{
-      const sr=chart.addBarSeries({upColor:up,downColor:dn});
-      sr.setData(norm);
+      mainSeries=chart.addBarSeries({upColor:up,downColor:dn});
+      mainSeries.setData(norm);
     }
+    window._mainSeries = mainSeries; // expose for tools
 
     // Volume bars
     if(indicators.vol && norm[0]?.volume !== undefined){
@@ -600,25 +602,12 @@ loadAll().then(()=>pick('NIFTY'));
 setInterval(loadAll,5*60*1000);
 
 // ── TOOLS ────────────────────────────────────────────────────────
-let activeTool = null;   // 'measure' | 'text' | null
-let measureState = null; // {x1,y1,price1,time1} first click stored
-let annotations = [];    // {el, x, y} text annotation elements
-let chartData = [];      // last loaded norm data reference
-
-function setTool(tool){
-  activeTool = activeTool === tool ? null : tool;
-  document.getElementById('btn-measure').classList.toggle('active', activeTool==='measure');
-  document.getElementById('btn-text').classList.toggle('active', activeTool==='text');
-  measureState = null;
-  hideMeasureTooltip();
-  const canvas = document.getElementById('drawing-canvas');
-  canvas.style.pointerEvents = activeTool ? 'all' : 'none';
-  document.getElementById('chartbox').style.cursor = activeTool ? 'crosshair' : 'default';
-}
-
-function hideMeasureTooltip(){
-  document.getElementById('measure-tooltip').style.display = 'none';
-}
+let activeTool = null;
+let measureState = null;
+let annotations = [];
+let chartData = [];
+let chartClickHandler = null;
+let chartMoveHandler = null;
 
 function syncCanvas(){
   const box = document.getElementById('chartbox');
@@ -627,149 +616,121 @@ function syncCanvas(){
   canvas.height = box.clientHeight;
 }
 
+function clearCanvas(){
+  syncCanvas();
+  const canvas = document.getElementById('drawing-canvas');
+  canvas.getContext('2d').clearRect(0,0,canvas.width,canvas.height);
+}
+
 function drawMeasureLine(x1,y1,x2,y2){
   syncCanvas();
   const canvas = document.getElementById('drawing-canvas');
   const ctx = canvas.getContext('2d');
   ctx.clearRect(0,0,canvas.width,canvas.height);
-  // Shaded rectangle
-  ctx.fillStyle = 'rgba(232,197,71,0.08)';
-  ctx.fillRect(Math.min(x1,x2), Math.min(y1,y2), Math.abs(x2-x1), Math.abs(y2-y1));
-  // Lines
-  ctx.strokeStyle = 'rgba(232,197,71,0.8)';
-  ctx.lineWidth = 1;
-  ctx.setLineDash([4,3]);
+  ctx.fillStyle = 'rgba(232,197,71,0.07)';
+  ctx.fillRect(Math.min(x1,x2),Math.min(y1,y2),Math.abs(x2-x1),Math.abs(y2-y1));
+  ctx.strokeStyle='#e8c547'; ctx.lineWidth=1.5; ctx.setLineDash([5,4]);
   ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
   ctx.setLineDash([]);
-  // Endpoint dots
-  ctx.fillStyle = '#e8c547';
-  ctx.beginPath(); ctx.arc(x1,y1,4,0,Math.PI*2); ctx.fill();
-  ctx.beginPath(); ctx.arc(x2,y2,4,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#e8c547';
+  [[x1,y1],[x2,y2]].forEach(([x,y])=>{ctx.beginPath();ctx.arc(x,y,4,0,Math.PI*2);ctx.fill();});
 }
 
-function showMeasureTooltip(x, y, price1, price2, time1, time2){
-  const diff = price2 - price1;
-  const pct  = ((diff / price1) * 100).toFixed(2);
-  const sign = diff >= 0 ? '+' : '';
-  const candles = Math.abs(Math.round((time2 - time1) / 300)); // rough candle count
-  const tooltip = document.getElementById('measure-tooltip');
-  tooltip.innerHTML = `
-    <div style="color:${diff>=0?'#00e5a0':'#ff4d6d'};font-weight:700;">${sign}₹${Math.abs(diff).toFixed(2)} (${sign}${pct}%)</div>
-    <div style="color:#5a5a75;margin-top:3px;">~${candles} bars</div>
-  `;
-  tooltip.style.display = 'block';
-  const box = document.getElementById('chartbox');
-  const bx = box.getBoundingClientRect();
-  let tx = x + 14, ty = y - 50;
-  if(tx + 160 > bx.width) tx = x - 170;
-  if(ty < 0) ty = y + 14;
-  tooltip.style.left = tx + 'px';
-  tooltip.style.top  = ty + 'px';
+function showMeasureTooltip(x,y,price1,price2,time1,time2){
+  if(!price1||!price2) return;
+  const diff=price2-price1;
+  const pct=((diff/price1)*100).toFixed(2);
+  const sign=diff>=0?'+':'';
+  const barSize = chartData.length>1 ? chartData[1].time-chartData[0].time : 300;
+  const bars = Math.abs(Math.round((time2-time1)/barSize));
+  const t=document.getElementById('measure-tooltip');
+  t.innerHTML=`<div style="color:${diff>=0?'#00e5a0':'#ff4d6d'};font-weight:700;">${sign}₹${Math.abs(diff).toFixed(2)} (${sign}${pct}%)</div><div style="color:#5a5a75;margin-top:2px;">${bars} bars</div>`;
+  t.style.display='block';
+  const box=document.getElementById('chartbox');
+  let tx=x+14,ty=y-55;
+  if(tx+170>box.clientWidth) tx=x-175;
+  if(ty<0) ty=y+10;
+  t.style.left=tx+'px'; t.style.top=ty+'px';
 }
 
-function addTextAnnotation(x, y, price, time){
-  const container = document.getElementById('text-input-container');
-  const box = document.getElementById('chartbox');
-  container.style.display = 'block';
-  container.style.left = x + 'px';
-  container.style.top  = y + 'px';
-  const input = document.createElement('input');
-  input.className = 'text-input-box';
-  input.placeholder = 'Type note…';
-  container.innerHTML = '';
-  container.appendChild(input);
-  input.focus();
-  input.addEventListener('keydown', e=>{
-    if(e.key === 'Enter' && input.value.trim()){
-      const el = document.createElement('div');
-      el.className = 'text-annotation';
-      el.textContent = input.value.trim();
-      el.style.left = x + 'px';
-      el.style.top  = (y - 28) + 'px';
+function hideMeasureTooltip(){
+  document.getElementById('measure-tooltip').style.display='none';
+}
+
+function addTextAnnotation(x,y){
+  const box=document.getElementById('chartbox');
+  const c=document.getElementById('text-input-container');
+  c.innerHTML='';
+  c.style.cssText=`display:block;position:absolute;left:${x}px;top:${y-14}px;z-index:20;`;
+  const inp=document.createElement('input');
+  inp.className='text-input-box'; inp.placeholder='Type note… (Enter)';
+  c.appendChild(inp);
+  setTimeout(()=>inp.focus(),10);
+  inp.addEventListener('keydown',e=>{
+    if(e.key==='Enter'&&inp.value.trim()){
+      const el=document.createElement('div');
+      el.className='text-annotation';
+      el.textContent=inp.value.trim();
+      el.style.cssText=`position:absolute;left:${x}px;top:${y-28}px;`;
       box.appendChild(el);
-      annotations.push({el, x, y: y-28});
-      container.style.display = 'none';
-      container.innerHTML = '';
+      annotations.push(el);
+      c.style.display='none';
     }
-    if(e.key === 'Escape'){
-      container.style.display = 'none';
-      container.innerHTML = '';
-    }
+    if(e.key==='Escape') c.style.display='none';
   });
 }
 
-function clearAll(){
-  const canvas = document.getElementById('drawing-canvas');
-  const ctx = canvas.getContext('2d');
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  annotations.forEach(a=>a.el.remove());
-  annotations = [];
-  measureState = null;
-  hideMeasureTooltip();
+function setTool(tool){
+  // Unsubscribe old chart handlers first
+  if(chart){
+    if(chartClickHandler){chart.unsubscribeClick(chartClickHandler);chartClickHandler=null;}
+    if(chartMoveHandler){chart.unsubscribeCrosshairMove(chartMoveHandler);chartMoveHandler=null;}
+  }
+  activeTool = activeTool===tool ? null : tool;
+  document.getElementById('btn-measure').classList.toggle('active',activeTool==='measure');
+  document.getElementById('btn-text').classList.toggle('active',activeTool==='text');
+  document.getElementById('chartbox').style.cursor = activeTool?'crosshair':'default';
+  measureState=null; hideMeasureTooltip();
+  if(!activeTool||!chart) return;
+
+  // Use Lightweight Charts native events — series.coordinateToPrice for accurate price
+  chartClickHandler = param=>{
+    if(!param||!param.point) return;
+    const {x,y}=param.point;
+    const series=window._mainSeries;
+    const price = series ? series.coordinateToPrice(y) : 0;
+    const time  = chart.timeScale().coordinateToTime(x) || 0;
+    if(activeTool==='measure'){
+      if(!measureState){ measureState={x,y,price,time}; }
+      else{ drawMeasureLine(measureState.x,measureState.y,x,y); showMeasureTooltip(x,y,measureState.price,price,measureState.time,time); measureState=null; }
+    }
+    if(activeTool==='text') addTextAnnotation(x,y);
+  };
+
+  chartMoveHandler = param=>{
+    if(activeTool!=='measure'||!measureState||!param||!param.point) return;
+    const {x,y}=param.point;
+    const series=window._mainSeries;
+    const price = series ? series.coordinateToPrice(y) : 0;
+    const time  = chart.timeScale().coordinateToTime(x) || 0;
+    drawMeasureLine(measureState.x,measureState.y,x,y);
+    showMeasureTooltip(x,y,measureState.price,price,measureState.time,time);
+  };
+
+  chart.subscribeClick(chartClickHandler);
+  chart.subscribeCrosshairMove(chartMoveHandler);
 }
 
-// Wire up tool buttons
-document.getElementById('btn-measure').addEventListener('click',()=>{setTool('measure');console.log('measure tool active:',activeTool);});
+function clearAll(){
+  clearCanvas();
+  annotations.forEach(a=>a.remove());
+  annotations=[]; measureState=null; hideMeasureTooltip();
+  document.getElementById('text-input-container').style.display='none';
+}
+
+document.getElementById('btn-measure').addEventListener('click',()=>setTool('measure'));
 document.getElementById('btn-text').addEventListener('click',()=>setTool('text'));
 document.getElementById('btn-clear').addEventListener('click',()=>clearAll());
-
-// Get price from Y coordinate using chart data (v3 compatible)
-function yToPrice(y){
-  const box = document.getElementById('chartbox');
-  const h = box.clientHeight;
-  if(!chartData.length) return 0;
-  const prices = chartData.map(d=>d.close);
-  const minP = Math.min(...prices);
-  const maxP = Math.max(...prices);
-  return maxP - (y / h) * (maxP - minP);
-}
-
-function xToTime(x){
-  const box = document.getElementById('chartbox');
-  const w = box.clientWidth;
-  if(!chartData.length) return 0;
-  const idx = Math.round((x / w) * (chartData.length - 1));
-  const clamped = Math.max(0, Math.min(chartData.length-1, idx));
-  return chartData[clamped].time;
-}
-
-// Canvas mouse events
-document.getElementById('drawing-canvas').addEventListener('click', e=>{
-  console.log('canvas clicked, activeTool:', activeTool, 'chart:', !!chart);
-  if(!chart || !activeTool) return;
-  const box = document.getElementById('chartbox');
-  const rect = box.getBoundingClientRect();
-  const x = e.clientX - rect.left;
-  const y = e.clientY - rect.top;
-  const price = yToPrice(y);
-  const time  = xToTime(x);
-
-  if(activeTool === 'measure'){
-    if(!measureState){
-      measureState = {x, y, price, time};
-    } else {
-      drawMeasureLine(measureState.x, measureState.y, x, y);
-      showMeasureTooltip(x, y, measureState.price, price, measureState.time, time);
-      measureState = null;
-    }
-  }
-  if(activeTool === 'text'){
-    addTextAnnotation(x, y, price, time);
-  }
-});
-
-// Preview line while moving mouse in measure mode
-document.getElementById('drawing-canvas').addEventListener('mousemove', e=>{
-  if(activeTool !== 'measure' || !measureState || !chart) return;
-  const box = document.getElementById('chartbox');
-  const rect = box.getBoundingClientRect();
-  const x = e.clientX - rect.left;
-  const y = e.clientY - rect.top;
-  drawMeasureLine(measureState.x, measureState.y, x, y);
-  const price = yToPrice(y);
-  const time  = xToTime(x);
-  showMeasureTooltip(x, y, measureState.price, price, measureState.time, time);
-});
 </script>
 </body>
 </html>
