@@ -315,7 +315,12 @@ function loadTVFundamentals(ticker) {
   yfLink.href = `https://finance.yahoo.com/quote/${YF_MAP[ticker]||ticker}`;
   yfLink.style.display = 'inline-flex';
   const scLink = document.getElementById('sc-link');
-  scLink.href = `https://in.tradingview.com/symbols/${(SC_MAP[ticker]||('NSE:'+ticker)).replace(':','-')}/financials-overview/`;
+  const INDEXES = ['NIFTY','BANKNIFTY','INDIAVIX','SENSEX'];
+  if(INDEXES.includes(ticker)){
+    scLink.href = `https://in.tradingview.com/chart/?symbol=${SC_MAP[ticker]||('NSE:'+ticker)}`;
+  } else {
+    scLink.href = `https://in.tradingview.com/symbols/${(SC_MAP[ticker]||('NSE:'+ticker)).replace(':','-')}/financials-overview/`;
+  }
   scLink.style.display = 'inline-flex';
   const sym = TV_MAP[ticker] || ('NSE:' + ticker);
   const container = document.getElementById('tv-fundamentals');
