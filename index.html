@@ -171,6 +171,8 @@
             <button class="cb ind-btn" data-ind="ma20">MA 20</button>
             <button class="cb ind-btn" data-ind="ma50">MA 50</button>
             <button class="cb ind-btn" data-ind="ma200">MA 200</button>
+            <button class="cb ind-btn" data-ind="rsi">RSI</button>
+            <button class="cb ind-btn" data-ind="macd">MACD</button>
           </div>
         </div>
         <div id="chartbox">
@@ -178,6 +180,12 @@
             <div class="ov-icon">📈</div>
             <div class="ov-text">Select a stock to view chart</div>
           </div>
+        </div>
+        <div id="rsi-box" style="display:none;height:120px;border-top:1px solid var(--border);position:relative;">
+          <div style="position:absolute;top:4px;left:8px;font-size:9px;color:var(--muted);font-family:'Space Mono',monospace;z-index:2;">RSI (14)</div>
+        </div>
+        <div id="macd-box" style="display:none;height:120px;border-top:1px solid var(--border);position:relative;">
+          <div style="position:absolute;top:4px;left:8px;font-size:9px;color:var(--muted);font-family:'Space Mono',monospace;z-index:2;">MACD (12,26,9)</div>
         </div>
         <div class="stats-row">
           <div class="stat"><div class="stat-label">OPEN</div><div class="stat-val" id="s-open">—</div></div>
@@ -217,7 +225,8 @@ const STOCKS=[
 ];
 
 let prices={},active=null,tf='1D',ct='candlestick',chart=null;
-let indicators={vol:true,ma20:false,ma50:false,ma200:false};
+let indicators={vol:true,ma20:false,ma50:false,ma200:false,rsi:false,macd:false};
+let rsiChart=null,macdChart=null;
 
 async function apiFetch(path){
   const r=await fetch(API_URL+path);
@@ -453,6 +462,99 @@ async function renderChart(){
   }
   chart.timeScale().fitContent();
   new ResizeObserver(()=>{if(chart)chart.applyOptions({width:box.clientWidth});}).observe(box);
+
+  // RSI
+  const rsiBox = document.getElementById('rsi-box');
+  if(rsiChart){rsiChart.remove();rsiChart=null;}
+  if(indicators.rsi && norm.length>=15){
+    rsiBox.style.display='block';
+    rsiChart = LightweightCharts.createChart(rsiBox,{
+      width:rsiBox.clientWidth, height:120,
+      layout:{background:{color:'#0f0f18'},textColor:'#5a5a75'},
+      grid:{vertLines:{color:'#171724'},horzLines:{color:'#171724'}},
+      rightPriceScale:{borderColor:'#252535', scaleMargins:{top:0.1,bottom:0.1}},
+      timeScale:{borderColor:'#252535', timeVisible:tf==='1D'||tf==='1W'},
+      crosshair:{mode:LightweightCharts.CrosshairMode.Normal},
+    });
+    // Sync timescale with main chart
+    chart.timeScale().subscribeVisibleLogicalRangeChange(r=>{if(r)rsiChart.timeScale().setVisibleLogicalRange(r);});
+    rsiChart.timeScale().subscribeVisibleLogicalRangeChange(r=>{if(r)chart.timeScale().setVisibleLogicalRange(r);});
+
+    // Calculate RSI(14)
+    const period=14;
+    const rsiData=[];
+    for(let i=period;i<norm.length;i++){
+      let gains=0,losses=0;
+      for(let j=i-period+1;j<=i;j++){
+        const diff=norm[j].close-norm[j-1].close;
+        if(diff>0) gains+=diff; else losses+=Math.abs(diff);
+      }
+      const rs=losses===0?100:(gains/period)/(losses/period);
+      const rsi=losses===0?100:100-(100/(1+rs));
+      rsiData.push({time:norm[i].time, value:parseFloat(rsi.toFixed(2))});
+    }
+    const rsiSeries=rsiChart.addLineSeries({color:'#a78bfa',lineWidth:1.5,priceLineVisible:false,lastValueVisible:true});
+    rsiSeries.setData(rsiData);
+    // Overbought/oversold lines
+    const ob=rsiChart.addLineSeries({color:'rgba(255,77,109,0.4)',lineWidth:1,lineStyle:2,priceLineVisible:false,lastValueVisible:false,crosshairMarkerVisible:false});
+    ob.setData(rsiData.map(d=>({time:d.time,value:70})));
+    const os=rsiChart.addLineSeries({color:'rgba(0,229,160,0.4)',lineWidth:1,lineStyle:2,priceLineVisible:false,lastValueVisible:false,crosshairMarkerVisible:false});
+    os.setData(rsiData.map(d=>({time:d.time,value:30})));
+    rsiChart.timeScale().fitContent();
+    new ResizeObserver(()=>{if(rsiChart)rsiChart.applyOptions({width:rsiBox.clientWidth});}).observe(rsiBox);
+  } else {
+    rsiBox.style.display='none';
+  }
+
+  // MACD
+  const macdBox = document.getElementById('macd-box');
+  if(macdChart){macdChart.remove();macdChart=null;}
+  if(indicators.macd && norm.length>=26){
+    macdBox.style.display='block';
+    macdChart = LightweightCharts.createChart(macdBox,{
+      width:macdBox.clientWidth, height:120,
+      layout:{background:{color:'#0f0f18'},textColor:'#5a5a75'},
+      grid:{vertLines:{color:'#171724'},horzLines:{color:'#171724'}},
+      rightPriceScale:{borderColor:'#252535', scaleMargins:{top:0.1,bottom:0.1}},
+      timeScale:{borderColor:'#252535', timeVisible:tf==='1D'||tf==='1W'},
+      crosshair:{mode:LightweightCharts.CrosshairMode.Normal},
+    });
+    chart.timeScale().subscribeVisibleLogicalRangeChange(r=>{if(r)macdChart.timeScale().setVisibleLogicalRange(r);});
+    macdChart.timeScale().subscribeVisibleLogicalRangeChange(r=>{if(r)chart.timeScale().setVisibleLogicalRange(r);});
+
+    // EMA helper
+    function calcEMA(data, period){
+      const k=2/(period+1); let ema=data[0].close;
+      return data.map((d,i)=>{
+        if(i===0){ema=d.close;} else {ema=d.close*k+ema*(1-k);}
+        return {time:d.time,value:parseFloat(ema.toFixed(2))};
+      });
+    }
+    const ema12=calcEMA(norm,12);
+    const ema26=calcEMA(norm,26);
+    const macdLine=norm.map((d,i)=>({time:d.time,value:parseFloat((ema12[i].value-ema26[i].value).toFixed(2))}));
+    // Signal line = EMA9 of MACD
+    const k=2/(9+1); let sig=macdLine[0].value;
+    const signalLine=macdLine.map((d,i)=>{
+      if(i===0){sig=d.value;} else {sig=d.value*k+sig*(1-k);}
+      return {time:d.time,value:parseFloat(sig.toFixed(2))};
+    });
+    const histogram=macdLine.map((d,i)=>({
+      time:d.time,
+      value:parseFloat((d.value-signalLine[i].value).toFixed(2)),
+      color:(d.value-signalLine[i].value)>=0?'rgba(0,229,160,0.5)':'rgba(255,77,109,0.5)'
+    }));
+    const histSeries=macdChart.addHistogramSeries({priceLineVisible:false,lastValueVisible:false});
+    histSeries.setData(histogram);
+    const macdSeries=macdChart.addLineSeries({color:'#63b3ed',lineWidth:1.5,priceLineVisible:false,lastValueVisible:true,crosshairMarkerVisible:false});
+    macdSeries.setData(macdLine);
+    const sigSeries=macdChart.addLineSeries({color:'#f7c948',lineWidth:1,priceLineVisible:false,lastValueVisible:true,crosshairMarkerVisible:false});
+    sigSeries.setData(signalLine);
+    macdChart.timeScale().fitContent();
+    new ResizeObserver(()=>{if(macdChart)macdChart.applyOptions({width:macdBox.clientWidth});}).observe(macdBox);
+  } else {
+    macdBox.style.display='none';
+  }
 }
 
 async function pick(ticker){active=ticker;renderTicker();renderSidebar();await renderChart();loadTVFundamentals(ticker);}
