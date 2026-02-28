@@ -165,6 +165,14 @@
             <button class="cb" data-ct="bar">Bar</button>
           </div>
         </div>
+        <div class="ctrl-bar" style="border-top:1px solid var(--border);">
+          <div class="ctrl-grp" id="indGrp">
+            <button class="cb ind-btn active" data-ind="vol">VOL</button>
+            <button class="cb ind-btn" data-ind="ma20">MA 20</button>
+            <button class="cb ind-btn" data-ind="ma50">MA 50</button>
+            <button class="cb ind-btn" data-ind="ma200">MA 200</button>
+          </div>
+        </div>
         <div id="chartbox">
           <div class="chart-overlay" id="overlay">
             <div class="ov-icon">📈</div>
@@ -209,6 +217,7 @@ const STOCKS=[
 ];
 
 let prices={},active=null,tf='1D',ct='candlestick',chart=null;
+let indicators={vol:true,ma20:false,ma50:false,ma200:false};
 
 async function apiFetch(path){
   const r=await fetch(API_URL+path);
@@ -379,13 +388,24 @@ async function renderChart(){
   });
 
   const up='#00e5a0',dn='#ff4d6d';
-  // v3: all timeframes use Unix seconds
+  // Normalize timestamps
   const seen=new Set();
   const norm=data
     .map(d=>({...d,time:Math.floor(d.time)}))
     .filter(d=>{if(seen.has(d.time))return false;seen.add(d.time);return true;})
     .sort((a,b)=>a.time-b.time);
+
+  // MA helper
+  function calcMA(data, period){
+    return data.map((d,i)=>{
+      if(i < period-1) return null;
+      const avg = data.slice(i-period+1, i+1).reduce((s,x)=>s+x.close,0)/period;
+      return {time:d.time, value:parseFloat(avg.toFixed(2))};
+    }).filter(x=>x!==null);
+  }
+
   try{
+    // Main price series
     if(ct==='candlestick'){
       const sr=chart.addCandlestickSeries({upColor:up,downColor:dn,borderUpColor:up,borderDownColor:dn,wickUpColor:up,wickDownColor:dn});
       sr.setData(norm);
@@ -396,6 +416,36 @@ async function renderChart(){
       const sr=chart.addBarSeries({upColor:up,downColor:dn});
       sr.setData(norm);
     }
+
+    // Volume bars
+    if(indicators.vol && norm[0]?.volume !== undefined){
+      const volSeries = chart.addHistogramSeries({
+        priceFormat:{type:'volume'},
+        priceScaleId:'vol',
+        scaleMargins:{top:0.8, bottom:0},
+        color:'#26a69a',
+      });
+      volSeries.setData(norm.map(d=>({
+        time:d.time,
+        value:d.volume||0,
+        color: d.close>=d.open ? 'rgba(0,229,160,0.4)' : 'rgba(255,77,109,0.4)'
+      })));
+    }
+
+    // Moving Averages
+    if(indicators.ma20 && norm.length>=20){
+      const s=chart.addLineSeries({color:'#f7c948',lineWidth:1,priceLineVisible:false,lastValueVisible:true,crosshairMarkerVisible:false});
+      s.setData(calcMA(norm,20));
+    }
+    if(indicators.ma50 && norm.length>=50){
+      const s=chart.addLineSeries({color:'#63b3ed',lineWidth:1,priceLineVisible:false,lastValueVisible:true,crosshairMarkerVisible:false});
+      s.setData(calcMA(norm,50));
+    }
+    if(indicators.ma200 && norm.length>=200){
+      const s=chart.addLineSeries({color:'#fc8181',lineWidth:1,priceLineVisible:false,lastValueVisible:true,crosshairMarkerVisible:false});
+      s.setData(calcMA(norm,200));
+    }
+
   }catch(e){
     console.error('Chart error:',e);
     box.innerHTML='<div class="chart-overlay" style="display:flex"><div class="ov-icon">⚠️</div><div class="ov-text">Chart error: '+e.message+'</div></div>';
@@ -408,6 +458,13 @@ async function renderChart(){
 async function pick(ticker){active=ticker;renderTicker();renderSidebar();await renderChart();loadTVFundamentals(ticker);}
 function refreshAll(){loadAll().then(()=>{if(active)renderChart();});}
 
+document.getElementById('indGrp').addEventListener('click',async e=>{
+  const b=e.target.closest('[data-ind]');if(!b)return;
+  const ind=b.dataset.ind;
+  indicators[ind]=!indicators[ind];
+  b.classList.toggle('active',indicators[ind]);
+  if(active)await renderChart();
+});
 document.getElementById('tfGrp').addEventListener('click',async e=>{
   const b=e.target.closest('[data-tf]');if(!b)return;
   tf=b.dataset.tf;
