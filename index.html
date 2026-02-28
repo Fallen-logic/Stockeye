@@ -709,7 +709,7 @@ function clearAll(){
 }
 
 // Wire up tool buttons
-document.getElementById('btn-measure').addEventListener('click',()=>setTool('measure'));
+document.getElementById('btn-measure').addEventListener('click',()=>{setTool('measure');console.log('measure tool active:',activeTool);});
 document.getElementById('btn-text').addEventListener('click',()=>setTool('text'));
 document.getElementById('btn-clear').addEventListener('click',()=>clearAll());
 
@@ -735,6 +735,7 @@ function xToTime(x){
 
 // Canvas mouse events
 document.getElementById('drawing-canvas').addEventListener('click', e=>{
+  console.log('canvas clicked, activeTool:', activeTool, 'chart:', !!chart);
   if(!chart || !activeTool) return;
   const box = document.getElementById('chartbox');
   const rect = box.getBoundingClientRect();
