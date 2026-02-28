@@ -176,17 +176,10 @@
           <div class="stat"><div class="stat-label">LOW</div><div class="stat-val down" id="s-low">—</div></div>
           <div class="stat"><div class="stat-label">PREV CLOSE</div><div class="stat-val" id="s-prev">—</div></div>
         </div>
-        <div class="key-stats" id="keyStats">
-          <div class="ks"><div class="ks-label">MKT CAP</div><div class="ks-val" id="ks-mcap">—</div></div>
-          <div class="ks"><div class="ks-label">P/E RATIO</div><div class="ks-val" id="ks-pe">—</div></div>
-          <div class="ks"><div class="ks-label">EPS</div><div class="ks-val" id="ks-eps">—</div></div>
-          <div class="ks"><div class="ks-label">52W HIGH</div><div class="ks-val up" id="ks-52h">—</div></div>
-          <div class="ks"><div class="ks-label">52W LOW</div><div class="ks-val down" id="ks-52l">—</div></div>
-          <div class="ks"><div class="ks-label">BETA</div><div class="ks-val" id="ks-beta">—</div></div>
-          <div class="ks"><div class="ks-label">DIV YIELD</div><div class="ks-val" id="ks-div">—</div></div>
-          <div class="ks"><div class="ks-label">VOLUME</div><div class="ks-val" id="ks-vol">—</div></div>
-          <div class="ks"><div class="ks-label">AVG VOL</div><div class="ks-val" id="ks-avgvol">—</div></div>
-          <div class="ks"><div class="ks-label">SECTOR</div><div class="ks-val" id="ks-sector" style="font-size:10px">—</div></div>
+        <div id="tv-fundamentals" style="height:220px;background:var(--surface2);border-top:1px solid var(--border);">
+          <div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--muted);font-size:11px;font-family:'Space Mono',monospace;">
+            SELECT A STOCK TO VIEW FUNDAMENTALS
+          </div>
         </div>
       </div>
     </div>
@@ -294,38 +287,46 @@ function updateHeader(){
   }
 }
 
-async function loadStats(ticker){
-  // Reset stats to loading state
-  ['ks-mcap','ks-pe','ks-eps','ks-52h','ks-52l','ks-beta','ks-div','ks-vol','ks-avgvol','ks-sector']
-    .forEach(id=>document.getElementById(id).textContent='…');
+
+const TV_MAP = {
+  TCS:'NSE:TCS', SBI:'NSE:SBIN', HDFC:'NSE:HDFCBANK', ICICI:'NSE:ICICIBANK',
+  TITAN:'NSE:TITAN', INFOSYS:'NSE:INFY', CIPLA:'NSE:CIPLA',
+  ULTRATECH:'NSE:ULTRACEMCO', RELIANCE:'NSE:RELIANCE',
+  NIFTY:'NSE:NIFTY50', BANKNIFTY:'NSE:BANKNIFTY',
+  INDIAVIX:'NSE:INDIAVIX', SENSEX:'BSE:SENSEX'
+};
+
+function loadTVFundamentals(ticker) {
   // Update Yahoo Finance link
-  const yf_sym = {
+  const YF_MAP = {
     TCS:'TCS.NS',SBI:'SBIN.NS',HDFC:'HDFCBANK.NS',ICICI:'ICICIBANK.NS',
     TITAN:'TITAN.NS',INFOSYS:'INFY.NS',CIPLA:'CIPLA.NS',ULTRATECH:'ULTRACEMCO.NS',
     RELIANCE:'RELIANCE.NS',NIFTY:'%5ENSEI',BANKNIFTY:'%5ENSEBANK',
     INDIAVIX:'%5EINDIAVIX',SENSEX:'%5EBSESN'
-  }[ticker] || ticker;
+  };
   const yfLink = document.getElementById('yf-link');
-  yfLink.href = `https://finance.yahoo.com/quote/${yf_sym}`;
+  yfLink.href = `https://finance.yahoo.com/quote/${YF_MAP[ticker]||ticker}`;
   yfLink.style.display = 'inline-flex';
-  try{
-    const s = await apiFetch(`/stats/${ticker}`);
-    if(s.error) throw new Error(s.error);
-    document.getElementById('ks-mcap').textContent   = s.market_cap;
-    document.getElementById('ks-pe').textContent     = s.pe_ratio;
-    document.getElementById('ks-eps').textContent    = s.eps;
-    document.getElementById('ks-52h').textContent    = s.week52_high ? '₹'+s.week52_high : '—';
-    document.getElementById('ks-52l').textContent    = s.week52_low  ? '₹'+s.week52_low  : '—';
-    document.getElementById('ks-beta').textContent   = s.beta;
-    document.getElementById('ks-div').textContent    = s.div_yield;
-    document.getElementById('ks-vol').textContent    = s.volume;
-    document.getElementById('ks-avgvol').textContent = s.avg_volume;
-    document.getElementById('ks-sector').textContent = s.sector;
-  }catch(e){
-    ['ks-mcap','ks-pe','ks-eps','ks-52h','ks-52l','ks-beta','ks-div','ks-vol','ks-avgvol','ks-sector']
-      .forEach(id=>document.getElementById(id).textContent='—');
-  }
+  const sym = TV_MAP[ticker] || ('NSE:' + ticker);
+  const container = document.getElementById('tv-fundamentals');
+  container.innerHTML = '';
+  const script = document.createElement('script');
+  script.type = 'text/javascript';
+  script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-financials.js';
+  script.async = true;
+  script.innerHTML = JSON.stringify({
+    symbol: sym,
+    colorTheme: 'dark',
+    isTransparent: true,
+    largeChartUrl: '',
+    displayMode: 'regular',
+    width: '100%',
+    height: 220,
+    locale: 'en'
+  });
+  container.appendChild(script);
 }
+
 
 async function renderChart(){
   if(!active)return;
@@ -389,7 +390,7 @@ async function renderChart(){
   new ResizeObserver(()=>{if(chart)chart.applyOptions({width:box.clientWidth});}).observe(box);
 }
 
-async function pick(ticker){active=ticker;renderTicker();renderSidebar();await renderChart();loadStats(ticker);}
+async function pick(ticker){active=ticker;renderTicker();renderSidebar();await renderChart();loadTVFundamentals(ticker);}
 function refreshAll(){loadAll().then(()=>{if(active)renderChart();});}
 
 document.getElementById('tfGrp').addEventListener('click',async e=>{
