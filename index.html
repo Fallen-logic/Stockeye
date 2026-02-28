@@ -96,6 +96,10 @@
   .stat-label{font-size:9px;color:var(--muted);font-family:'Space Mono',monospace;letter-spacing:.8px;margin-bottom:4px;}
   .stat-val{font-family:'Space Mono',monospace;font-size:13px;font-weight:700;}
   @media(max-width:600px){.stats-row{grid-template-columns:repeat(2,1fr);}#chartbox{height:280px;}.big-price{font-size:20px;}}
+  .tool-btn{background:none;border:1px solid transparent;}
+  .tool-btn.active{background:rgba(232,197,71,.15);border-color:rgba(232,197,71,.4);color:var(--accent);}
+  .text-annotation{position:absolute;background:rgba(232,197,71,.15);border:1px solid rgba(232,197,71,.5);border-radius:4px;padding:3px 7px;font-family:'Space Mono',monospace;font-size:11px;color:var(--accent);cursor:move;z-index:6;white-space:nowrap;}
+  .text-input-box{background:#1a1a24;border:1px solid var(--accent);border-radius:4px;padding:4px 8px;font-family:'Space Mono',monospace;font-size:11px;color:var(--accent);outline:none;min-width:120px;}
 
   /* Yahoo Finance button */
   .yf-btn{background:rgba(99,179,237,.1);border:1px solid rgba(99,179,237,.3);color:#63b3ed;
@@ -174,12 +178,21 @@
             <button class="cb ind-btn" data-ind="rsi">RSI</button>
             <button class="cb ind-btn" data-ind="macd">MACD</button>
           </div>
+          <div class="sep"></div>
+          <div class="ctrl-grp" id="toolGrp">
+            <button class="cb tool-btn" id="btn-measure" title="Measure Tool">📐 MEASURE</button>
+            <button class="cb tool-btn" id="btn-text" title="Text Annotation">✏ TEXT</button>
+            <button class="cb tool-btn" id="btn-clear" title="Clear All">✕ CLEAR</button>
+          </div>
         </div>
-        <div id="chartbox">
+        <div id="chartbox" style="position:relative;">
           <div class="chart-overlay" id="overlay">
             <div class="ov-icon">📈</div>
             <div class="ov-text">Select a stock to view chart</div>
           </div>
+          <canvas id="drawing-canvas" style="position:absolute;top:0;left:0;pointer-events:none;z-index:5;"></canvas>
+          <div id="text-input-container" style="display:none;position:absolute;z-index:10;"></div>
+          <div id="measure-tooltip" style="display:none;position:absolute;z-index:10;background:rgba(15,15,24,0.95);border:1px solid var(--accent);border-radius:6px;padding:8px 12px;font-family:'Space Mono',monospace;font-size:11px;pointer-events:none;"></div>
         </div>
         <div id="rsi-box" style="display:none;height:120px;border-top:1px solid var(--border);position:relative;">
           <div style="position:absolute;top:4px;left:8px;font-size:9px;color:var(--muted);font-family:'Space Mono',monospace;z-index:2;">RSI (14)</div>
@@ -584,6 +597,157 @@ document.getElementById('ctGrp').addEventListener('click',async e=>{
 
 loadAll().then(()=>pick('NIFTY'));
 setInterval(loadAll,5*60*1000);
+
+// ── TOOLS ────────────────────────────────────────────────────────
+let activeTool = null;   // 'measure' | 'text' | null
+let measureState = null; // {x1,y1,price1,time1} first click stored
+let annotations = [];    // {el, x, y} text annotation elements
+let chartData = [];      // last loaded norm data reference
+
+function setTool(tool){
+  activeTool = activeTool === tool ? null : tool;
+  document.getElementById('btn-measure').classList.toggle('active', activeTool==='measure');
+  document.getElementById('btn-text').classList.toggle('active', activeTool==='text');
+  measureState = null;
+  hideMeasureTooltip();
+  const canvas = document.getElementById('drawing-canvas');
+  canvas.style.pointerEvents = activeTool ? 'all' : 'none';
+  document.getElementById('chartbox').style.cursor = activeTool ? 'crosshair' : 'default';
+}
+
+function hideMeasureTooltip(){
+  document.getElementById('measure-tooltip').style.display = 'none';
+}
+
+function syncCanvas(){
+  const box = document.getElementById('chartbox');
+  const canvas = document.getElementById('drawing-canvas');
+  canvas.width = box.clientWidth;
+  canvas.height = box.clientHeight;
+}
+
+function drawMeasureLine(x1,y1,x2,y2){
+  syncCanvas();
+  const canvas = document.getElementById('drawing-canvas');
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  // Shaded rectangle
+  ctx.fillStyle = 'rgba(232,197,71,0.08)';
+  ctx.fillRect(Math.min(x1,x2), Math.min(y1,y2), Math.abs(x2-x1), Math.abs(y2-y1));
+  // Lines
+  ctx.strokeStyle = 'rgba(232,197,71,0.8)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4,3]);
+  ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+  ctx.setLineDash([]);
+  // Endpoint dots
+  ctx.fillStyle = '#e8c547';
+  ctx.beginPath(); ctx.arc(x1,y1,4,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x2,y2,4,0,Math.PI*2); ctx.fill();
+}
+
+function showMeasureTooltip(x, y, price1, price2, time1, time2){
+  const diff = price2 - price1;
+  const pct  = ((diff / price1) * 100).toFixed(2);
+  const sign = diff >= 0 ? '+' : '';
+  const candles = Math.abs(Math.round((time2 - time1) / 300)); // rough candle count
+  const tooltip = document.getElementById('measure-tooltip');
+  tooltip.innerHTML = `
+    <div style="color:${diff>=0?'#00e5a0':'#ff4d6d'};font-weight:700;">${sign}₹${Math.abs(diff).toFixed(2)} (${sign}${pct}%)</div>
+    <div style="color:#5a5a75;margin-top:3px;">~${candles} bars</div>
+  `;
+  tooltip.style.display = 'block';
+  const box = document.getElementById('chartbox');
+  const bx = box.getBoundingClientRect();
+  let tx = x + 14, ty = y - 50;
+  if(tx + 160 > bx.width) tx = x - 170;
+  if(ty < 0) ty = y + 14;
+  tooltip.style.left = tx + 'px';
+  tooltip.style.top  = ty + 'px';
+}
+
+function addTextAnnotation(x, y, price, time){
+  const container = document.getElementById('text-input-container');
+  const box = document.getElementById('chartbox');
+  container.style.display = 'block';
+  container.style.left = x + 'px';
+  container.style.top  = y + 'px';
+  const input = document.createElement('input');
+  input.className = 'text-input-box';
+  input.placeholder = 'Type note…';
+  container.innerHTML = '';
+  container.appendChild(input);
+  input.focus();
+  input.addEventListener('keydown', e=>{
+    if(e.key === 'Enter' && input.value.trim()){
+      const el = document.createElement('div');
+      el.className = 'text-annotation';
+      el.textContent = input.value.trim();
+      el.style.left = x + 'px';
+      el.style.top  = (y - 28) + 'px';
+      box.appendChild(el);
+      annotations.push({el, x, y: y-28});
+      container.style.display = 'none';
+      container.innerHTML = '';
+    }
+    if(e.key === 'Escape'){
+      container.style.display = 'none';
+      container.innerHTML = '';
+    }
+  });
+}
+
+function clearAll(){
+  const canvas = document.getElementById('drawing-canvas');
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  annotations.forEach(a=>a.el.remove());
+  annotations = [];
+  measureState = null;
+  hideMeasureTooltip();
+}
+
+// Wire up tool buttons
+document.getElementById('btn-measure').addEventListener('click',()=>setTool('measure'));
+document.getElementById('btn-text').addEventListener('click',()=>setTool('text'));
+document.getElementById('btn-clear').addEventListener('click',()=>clearAll());
+
+// Canvas mouse events
+document.getElementById('drawing-canvas').addEventListener('click', e=>{
+  if(!chart || !activeTool) return;
+  const box = document.getElementById('chartbox');
+  const rect = box.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  const price = chart.priceScale('right').coordinateToPrice(y);
+  const time  = chart.timeScale().coordinateToTime(x);
+
+  if(activeTool === 'measure'){
+    if(!measureState){
+      measureState = {x, y, price, time};
+    } else {
+      drawMeasureLine(measureState.x, measureState.y, x, y);
+      showMeasureTooltip(x, y, measureState.price, price, measureState.time, time);
+      measureState = null;
+    }
+  }
+  if(activeTool === 'text'){
+    addTextAnnotation(x, y, price, time);
+  }
+});
+
+// Preview line while moving mouse in measure mode
+document.getElementById('drawing-canvas').addEventListener('mousemove', e=>{
+  if(activeTool !== 'measure' || !measureState || !chart) return;
+  const box = document.getElementById('chartbox');
+  const rect = box.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  drawMeasureLine(measureState.x, measureState.y, x, y);
+  const price = chart.priceScale('right').coordinateToPrice(y);
+  const time  = chart.timeScale().coordinateToTime(x);
+  if(price && time) showMeasureTooltip(x, y, measureState.price, price, measureState.time, time);
+});
 </script>
 </body>
 </html>
