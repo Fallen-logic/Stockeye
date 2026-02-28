@@ -473,6 +473,7 @@ async function renderChart(){
     box.innerHTML='<div class="chart-overlay" style="display:flex"><div class="ov-icon">⚠️</div><div class="ov-text">Chart error: '+e.message+'</div></div>';
     return;
   }
+  chartData = norm;
   chart.timeScale().fitContent();
   new ResizeObserver(()=>{if(chart)chart.applyOptions({width:box.clientWidth});}).observe(box);
 
@@ -712,6 +713,26 @@ document.getElementById('btn-measure').addEventListener('click',()=>setTool('mea
 document.getElementById('btn-text').addEventListener('click',()=>setTool('text'));
 document.getElementById('btn-clear').addEventListener('click',()=>clearAll());
 
+// Get price from Y coordinate using chart data (v3 compatible)
+function yToPrice(y){
+  const box = document.getElementById('chartbox');
+  const h = box.clientHeight;
+  if(!chartData.length) return 0;
+  const prices = chartData.map(d=>d.close);
+  const minP = Math.min(...prices);
+  const maxP = Math.max(...prices);
+  return maxP - (y / h) * (maxP - minP);
+}
+
+function xToTime(x){
+  const box = document.getElementById('chartbox');
+  const w = box.clientWidth;
+  if(!chartData.length) return 0;
+  const idx = Math.round((x / w) * (chartData.length - 1));
+  const clamped = Math.max(0, Math.min(chartData.length-1, idx));
+  return chartData[clamped].time;
+}
+
 // Canvas mouse events
 document.getElementById('drawing-canvas').addEventListener('click', e=>{
   if(!chart || !activeTool) return;
@@ -719,8 +740,8 @@ document.getElementById('drawing-canvas').addEventListener('click', e=>{
   const rect = box.getBoundingClientRect();
   const x = e.clientX - rect.left;
   const y = e.clientY - rect.top;
-  const price = chart.priceScale('right').coordinateToPrice(y);
-  const time  = chart.timeScale().coordinateToTime(x);
+  const price = yToPrice(y);
+  const time  = xToTime(x);
 
   if(activeTool === 'measure'){
     if(!measureState){
@@ -744,9 +765,9 @@ document.getElementById('drawing-canvas').addEventListener('mousemove', e=>{
   const x = e.clientX - rect.left;
   const y = e.clientY - rect.top;
   drawMeasureLine(measureState.x, measureState.y, x, y);
-  const price = chart.priceScale('right').coordinateToPrice(y);
-  const time  = chart.timeScale().coordinateToTime(x);
-  if(price && time) showMeasureTooltip(x, y, measureState.price, price, measureState.time, time);
+  const price = yToPrice(y);
+  const time  = xToTime(x);
+  showMeasureTooltip(x, y, measureState.price, price, measureState.time, time);
 });
 </script>
 </body>
