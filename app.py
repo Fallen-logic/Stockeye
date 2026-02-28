@@ -190,18 +190,35 @@ def get_news():
         return jsonify({"error": str(e)}), 500
 
 
-# Simple in-memory cache for stats (resets on server restart)
-_stats_cache = {}
+import json, os, time as _time
+
+CACHE_FILE = "/tmp/stats_cache.json"
+
+def _load_cache():
+    try:
+        if os.path.exists(CACHE_FILE):
+            with open(CACHE_FILE) as f:
+                return json.load(f)
+    except: pass
+    return {}
+
+def _save_cache(cache):
+    try:
+        with open(CACHE_FILE, "w") as f:
+            json.dump(cache, f)
+    except: pass
 
 @app.route("/stats/<ticker>")
 def get_stats(ticker):
-    import time
     yf_sym = TICKER_MAP.get(ticker.upper())
     if not yf_sym:
         return jsonify({"error": f"Unknown ticker: {ticker}"}), 404
-    cached = _stats_cache.get(ticker)
-    if cached and (time.time() - cached["_ts"]) < 43200:
+
+    cache = _load_cache()
+    cached = cache.get(ticker)
+    if cached and (_time.time() - cached.get("_ts", 0)) < 43200:
         return jsonify(cached)
+
     try:
         info = yf.Ticker(yf_sym).info
         def safe(key, fmt=None):
@@ -224,22 +241,23 @@ def get_stats(ticker):
                 return "—"
 
         result = {
-            "ticker":        ticker,
-            "market_cap":    safe("marketCap", "cr"),
-            "pe_ratio":      safe("trailingPE", "2f"),
-            "eps":           safe("trailingEps", "2f"),
-            "week52_high":   safe("fiftyTwoWeekHigh", "2f"),
-            "week52_low":    safe("fiftyTwoWeekLow", "2f"),
-            "beta":          safe("beta", "2f"),
-            "div_yield":     safe("dividendYield", "pct"),
-            "volume":        safe("volume", "vol"),
-            "avg_volume":    safe("averageVolume", "vol"),
-            "sector":        info.get("sector", "—"),
-            "industry":      info.get("industry", "—"),
-            "yf_symbol":     yf_sym,
-            "_ts":           time.time(),
+            "ticker":      ticker,
+            "market_cap":  safe("marketCap", "cr"),
+            "pe_ratio":    safe("trailingPE", "2f"),
+            "eps":         safe("trailingEps", "2f"),
+            "week52_high": safe("fiftyTwoWeekHigh", "2f"),
+            "week52_low":  safe("fiftyTwoWeekLow", "2f"),
+            "beta":        safe("beta", "2f"),
+            "div_yield":   safe("dividendYield", "pct"),
+            "volume":      safe("volume", "vol"),
+            "avg_volume":  safe("averageVolume", "vol"),
+            "sector":      info.get("sector", "—"),
+            "industry":    info.get("industry", "—"),
+            "yf_symbol":   yf_sym,
+            "_ts":         _time.time(),
         }
-        _stats_cache[ticker] = result
+        cache[ticker] = result
+        _save_cache(cache)
         return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
