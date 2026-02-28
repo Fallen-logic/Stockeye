@@ -141,6 +141,7 @@
             <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
               <h2 id="ctitle">—</h2>
               <a id="yf-link" class="yf-btn" href="#" target="_blank">↗ <span>Yahoo Finance</span></a>
+              <a id="sc-link" class="yf-btn" href="#" target="_blank" style="border-color:rgba(160,120,255,.3);color:#a078ff;background:rgba(160,120,255,.1);">↗ <span>Screener.in</span></a>
             </div>
             <p id="cname">Select a stock to view its chart</p>
           </div>
@@ -304,9 +305,18 @@ function loadTVFundamentals(ticker) {
     RELIANCE:'RELIANCE.NS',NIFTY:'%5ENSEI',BANKNIFTY:'%5ENSEBANK',
     INDIAVIX:'%5EINDIAVIX',SENSEX:'%5EBSESN'
   };
+  const SC_MAP = {
+    TCS:'TCS',SBI:'SBI',HDFC:'HDFC-BANK',ICICI:'ICICI-BANK',
+    TITAN:'TITAN',INFOSYS:'INFOSYS',CIPLA:'CIPLA',ULTRATECH:'ULTRATECH-CEM',
+    RELIANCE:'RELIANCE',NIFTY:'NIFTY-50',BANKNIFTY:'NIFTY-BANK',
+    INDIAVIX:'INDIA-VIX',SENSEX:'SENSEX'
+  };
   const yfLink = document.getElementById('yf-link');
   yfLink.href = `https://finance.yahoo.com/quote/${YF_MAP[ticker]||ticker}`;
   yfLink.style.display = 'inline-flex';
+  const scLink = document.getElementById('sc-link');
+  scLink.href = `https://www.screener.in/company/${SC_MAP[ticker]||ticker}/consolidated/`;
+  scLink.style.display = 'inline-flex';
   const sym = TV_MAP[ticker] || ('NSE:' + ticker);
   const container = document.getElementById('tv-fundamentals');
   container.innerHTML = '';
