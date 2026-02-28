@@ -308,14 +308,14 @@ function loadTVFundamentals(ticker) {
   const SC_MAP = {
     TCS:'NSE:TCS',SBI:'NSE:SBIN',HDFC:'NSE:HDFCBANK',ICICI:'NSE:ICICIBANK',
     TITAN:'NSE:TITAN',INFOSYS:'NSE:INFY',CIPLA:'NSE:CIPLA',ULTRATECH:'NSE:ULTRACEMCO',
-    RELIANCE:'NSE:RELIANCE',NIFTY:'NASDAQ:NIFTY50',BANKNIFTY:'NSE:BANKNIFTY',
+    RELIANCE:'NSE:RELIANCE',NIFTY:'NSE:NIFTY50',BANKNIFTY:'NSE:NIFTYBANK',
     INDIAVIX:'NSE:INDIAVIX',SENSEX:'BSE:SENSEX'
   };
   const yfLink = document.getElementById('yf-link');
   yfLink.href = `https://finance.yahoo.com/quote/${YF_MAP[ticker]||ticker}`;
   yfLink.style.display = 'inline-flex';
   const scLink = document.getElementById('sc-link');
-  scLink.href = `https://in.tradingview.com/symbols/${SC_MAP[ticker]||('NSE:'+ticker)}/financials-overview/`;
+  scLink.href = `https://in.tradingview.com/symbols/${(SC_MAP[ticker]||('NSE:'+ticker)).replace(':','-')}/financials-overview/`;
   scLink.style.display = 'inline-flex';
   const sym = TV_MAP[ticker] || ('NSE:' + ticker);
   const container = document.getElementById('tv-fundamentals');
