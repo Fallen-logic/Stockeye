@@ -245,8 +245,8 @@ let prices={},active=null,tf='1D',ct='candlestick',chart=null;
 let indicators={vol:true,ma20:false,ma50:false,ma200:false,rsi:false,macd:false};
 let rsiChart=null,macdChart=null;
 
-async function apiFetch(path){
-  const r=await fetch(API_URL+path);
+async function apiFetch(path, opts={}){
+  const r=await fetch(API_URL+path, opts);
   if(!r.ok)throw new Error('API error');
   return r.json();
 }
@@ -577,7 +577,7 @@ async function renderChart(){
   }
 }
 
-async function pick(ticker){active=ticker;renderTicker();renderSidebar();await renderChart();loadTVFundamentals(ticker);}
+async function pick(ticker){active=ticker;renderTicker();renderSidebar();await renderChart();loadTVFundamentals(ticker);await loadAndReplayDrawings();}
 function refreshAll(){loadAll().then(()=>{if(active)renderChart();});}
 
 document.getElementById('indGrp').addEventListener('click',async e=>{
@@ -592,7 +592,7 @@ document.getElementById('tfGrp').addEventListener('click',async e=>{
   tf=b.dataset.tf;
   document.querySelectorAll('[data-tf]').forEach(x=>x.classList.remove('active'));
   b.classList.add('active');
-  if(active)await renderChart();
+  if(active){await renderChart();await loadAndReplayDrawings();}
 });
 document.getElementById('ctGrp').addEventListener('click',async e=>{
   const b=e.target.closest('[data-ct]');if(!b)return;
@@ -687,7 +687,7 @@ function addTextAnnotation(x,y){
   });
 }
 
-function addHorizontalLine(price){
+function addHorizontalLine(price, save=true){
   if(!chart||!window._mainSeries||!chartData.length) return;
   const s = chart.addLineSeries({
     color:'rgba(99,179,237,0.8)', lineWidth:1, lineStyle:2,
@@ -699,9 +699,10 @@ function addHorizontalLine(price){
     {time: chartData[chartData.length-1].time, value: price}
   ]);
   drawingLines.push({series:s, type:'hline'});
+  if(save){ savedDrawings.push({type:'hline', price}); saveDrawings(); }
 }
 
-function addVerticalLine(time){
+function addVerticalLine(time, save=true){
   if(!chart||!chartData.length) return;
   const prices = chartData.map(d=>d.close);
   const minP = Math.min(...prices)*0.995;
@@ -712,11 +713,11 @@ function addVerticalLine(time){
   });
   s.setData([{time, value:minP},{time, value:maxP}]);
   drawingLines.push({series:s, type:'vline'});
+  if(save){ savedDrawings.push({type:'vline', time}); saveDrawings(); }
 }
 
-function addTrendLine(x1,y1,price1,time1,x2,y2,price2,time2){
+function addTrendLine(x1,y1,price1,time1,x2,y2,price2,time2,save=true){
   if(!chart||!chartData.length) return;
-  // Extend line across visible chart range
   const t1 = chartData[0].time;
   const t2 = chartData[chartData.length-1].time;
   const slope = (price2-price1)/(time2-time1||1);
@@ -728,6 +729,41 @@ function addTrendLine(x1,y1,price1,time1,x2,y2,price2,time2){
   });
   s.setData([{time:t1,value:extP1},{time:t2,value:extP2}]);
   drawingLines.push({series:s, type:'tline'});
+  if(save){ savedDrawings.push({type:'tline',x1,y1,price1,time1,x2,y2,price2,time2}); saveDrawings(); }
+}
+
+// ── PERSISTENCE ─────────────────────────────────────────────────
+let savedDrawings = []; // in-memory list of drawing descriptors
+
+async function saveDrawings(){
+  try{
+    await apiFetch(`/drawings/${active}/${tf}`, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(savedDrawings)
+    });
+  }catch(e){ console.warn('Save drawings failed:', e); }
+}
+
+async function loadAndReplayDrawings(){
+  savedDrawings = [];
+  try{
+    const data = await apiFetch(`/drawings/${active}/${tf}`);
+    if(Array.isArray(data)) savedDrawings = data;
+  }catch(e){ console.warn('Load drawings failed:', e); }
+  replayDrawings();
+}
+
+function replayDrawings(){
+  // Remove existing drawing series first
+  drawingLines.forEach(d=>{ try{ chart.removeSeries(d.series); }catch{} });
+  drawingLines = [];
+  savedDrawings.forEach(d=>{
+    if(d.type==='hline') addHorizontalLine(d.price);
+    if(d.type==='vline') addVerticalLine(d.time);
+    if(d.type==='tline') addTrendLine(d.x1,d.y1,d.price1,d.time1,d.x2,d.y2,d.price2,d.time2);
+    if(d.type==='fib')   addFibonacci(d.price1,d.time1,d.price2,d.time2);
+  });
 }
 
 function drawFibPreview(x1, y1, price1, x2, y2, price2){
@@ -805,7 +841,7 @@ function drawFibPreview(x1, y1, price1, x2, y2, price2){
   ctx.beginPath(); ctx.arc(x2,y2,4,0,Math.PI*2); ctx.fill();
 }
 
-function addFibonacci(price1, time1, price2, time2){
+function addFibonacci(price1, time1, price2, time2, save=true){
   if(!chart||!chartData.length) return;
   const high = Math.max(price1, price2);
   const low  = Math.min(price1, price2);
@@ -852,6 +888,7 @@ function addFibonacci(price1, time1, price2, time2){
   });
   trendSeries.setData([{time:time1,value:price1},{time:time2,value:price2}]);
   drawingLines.push({series:trendSeries, type:'fib'});
+  if(save){ savedDrawings.push({type:'fib',price1,time1,price2,time2}); saveDrawings(); }
 }
 
 function setTool(tool){
@@ -929,6 +966,8 @@ function clearAll(){
   annotations=[];
   drawingLines.forEach(d=>{ try{ chart.removeSeries(d.series); }catch{} });
   drawingLines=[];
+  savedDrawings=[];
+  saveDrawings();
   measureState=null; hideMeasureTooltip();
   document.getElementById('text-input-container').style.display='none';
 }
