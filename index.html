@@ -730,6 +730,81 @@ function addTrendLine(x1,y1,price1,time1,x2,y2,price2,time2){
   drawingLines.push({series:s, type:'tline'});
 }
 
+function drawFibPreview(x1, y1, price1, x2, y2, price2){
+  syncCanvas();
+  const canvas = document.getElementById('drawing-canvas');
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  const high = Math.max(price1,price2);
+  const low  = Math.min(price1,price2);
+  const diff = high - low;
+  const series = window._mainSeries;
+  if(!series) return;
+
+  const levels = [
+    {level:0,     color:'rgba(120,123,134,0.8)'},
+    {level:0.236, color:'rgba(247,124,128,0.8)'},
+    {level:0.382, color:'rgba(247,201,72,0.8)' },
+    {level:0.5,   color:'rgba(129,199,132,0.8)'},
+    {level:0.618, color:'rgba(79,195,247,0.8)' },
+    {level:0.786, color:'rgba(206,147,216,0.8)'},
+    {level:1.0,   color:'rgba(120,123,134,0.8)'},
+  ];
+  const pcts = ['0%','23.6%','38.2%','50%','61.8%','78.6%','100%'];
+
+  // Draw fills between bands
+  const fillColors = [
+    'rgba(247,124,128,0.04)',
+    'rgba(247,201,72,0.06)',
+    'rgba(129,199,132,0.06)',
+    'rgba(79,195,247,0.06)',
+    'rgba(206,147,216,0.04)',
+    'rgba(120,123,134,0.03)',
+  ];
+
+  const ys = levels.map(({level}) => {
+    const p = high - diff*level;
+    return series.priceToCoordinate ? series.priceToCoordinate(p) : (y1 + (y2-y1)*level);
+  });
+
+  // Fill bands
+  for(let i=0;i<ys.length-1;i++){
+    const ya=ys[i], yb=ys[i+1];
+    if(ya==null||yb==null) continue;
+    ctx.fillStyle=fillColors[i];
+    ctx.fillRect(0,Math.min(ya,yb),canvas.width,Math.abs(yb-ya));
+  }
+
+  // Draw level lines and labels
+  levels.forEach(({color},i)=>{
+    const y=ys[i];
+    if(y==null) return;
+    const isEdge=i===0||i===6;
+    ctx.strokeStyle=color;
+    ctx.lineWidth=isEdge?1.5:1;
+    ctx.setLineDash(isEdge?[]:[5,4]);
+    ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(canvas.width,y); ctx.stroke();
+    ctx.setLineDash([]);
+    // Label
+    const price=(high-diff*levels[i].level);
+    ctx.fillStyle=color;
+    ctx.font='10px Space Mono, monospace';
+    ctx.fillText(`${pcts[i]}  ₹${price.toFixed(2)}`, canvas.width-140, y-4);
+  });
+
+  // Diagonal anchor line
+  ctx.strokeStyle='rgba(120,123,134,0.5)';
+  ctx.lineWidth=1; ctx.setLineDash([3,3]);
+  ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Anchor dots
+  ctx.fillStyle='#e8c547';
+  ctx.beginPath(); ctx.arc(x1,y1,4,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x2,y2,4,0,Math.PI*2); ctx.fill();
+}
+
 function addFibonacci(price1, time1, price2, time2){
   if(!chart||!chartData.length) return;
   const high = Math.max(price1, price2);
@@ -836,8 +911,11 @@ function setTool(tool){
       drawMeasureLine(measureState.x,measureState.y,x,y);
       showMeasureTooltip(x,y,measureState.price,price,measureState.time,time);
     }
-    if((activeTool==='tline'||activeTool==='fib')&&measureState){
+    if(activeTool==='tline'&&measureState){
       drawMeasureLine(measureState.x,measureState.y,x,y);
+    }
+    if(activeTool==='fib'&&measureState){
+      drawFibPreview(measureState.x,measureState.y,measureState.price,x,y,price);
     }
   };
 
