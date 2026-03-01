@@ -182,6 +182,9 @@
           <div class="ctrl-grp" id="toolGrp">
             <button class="cb tool-btn" id="btn-measure" title="Measure Tool">📐 MEASURE</button>
             <button class="cb tool-btn" id="btn-text" title="Text Annotation">✏ TEXT</button>
+            <button class="cb tool-btn" id="btn-hline" title="Horizontal Line">— H-LINE</button>
+            <button class="cb tool-btn" id="btn-vline" title="Vertical Line">| V-LINE</button>
+            <button class="cb tool-btn" id="btn-tline" title="Trend Line">/ TREND</button>
             <button class="cb tool-btn" id="btn-clear" title="Clear All">✕ CLEAR</button>
           </div>
         </div>
@@ -608,6 +611,7 @@ let annotations = [];
 let chartData = [];
 let chartClickHandler = null;
 let chartMoveHandler = null;
+let drawingLines = []; // stores {series, type} for drawn lines
 
 function syncCanvas(){
   const box = document.getElementById('chartbox');
@@ -680,6 +684,49 @@ function addTextAnnotation(x,y){
   });
 }
 
+function addHorizontalLine(price){
+  if(!chart||!window._mainSeries||!chartData.length) return;
+  const s = chart.addLineSeries({
+    color:'rgba(99,179,237,0.8)', lineWidth:1, lineStyle:2,
+    priceLineVisible:false, lastValueVisible:true, crosshairMarkerVisible:false,
+    title: '₹'+price.toFixed(2)
+  });
+  s.setData([
+    {time: chartData[0].time, value: price},
+    {time: chartData[chartData.length-1].time, value: price}
+  ]);
+  drawingLines.push({series:s, type:'hline'});
+}
+
+function addVerticalLine(time){
+  if(!chart||!chartData.length) return;
+  const prices = chartData.map(d=>d.close);
+  const minP = Math.min(...prices)*0.995;
+  const maxP = Math.max(...prices)*1.005;
+  const s = chart.addLineSeries({
+    color:'rgba(247,201,72,0.7)', lineWidth:1, lineStyle:2,
+    priceLineVisible:false, lastValueVisible:false, crosshairMarkerVisible:false
+  });
+  s.setData([{time, value:minP},{time, value:maxP}]);
+  drawingLines.push({series:s, type:'vline'});
+}
+
+function addTrendLine(x1,y1,price1,time1,x2,y2,price2,time2){
+  if(!chart||!chartData.length) return;
+  // Extend line across visible chart range
+  const t1 = chartData[0].time;
+  const t2 = chartData[chartData.length-1].time;
+  const slope = (price2-price1)/(time2-time1||1);
+  const extP1 = price1 + slope*(t1-time1);
+  const extP2 = price1 + slope*(t2-time1);
+  const s = chart.addLineSeries({
+    color:'rgba(160,120,255,0.9)', lineWidth:1.5,
+    priceLineVisible:false, lastValueVisible:false, crosshairMarkerVisible:false
+  });
+  s.setData([{time:t1,value:extP1},{time:t2,value:extP2}]);
+  drawingLines.push({series:s, type:'tline'});
+}
+
 function setTool(tool){
   // Unsubscribe old chart handlers first
   if(chart){
@@ -689,6 +736,9 @@ function setTool(tool){
   activeTool = activeTool===tool ? null : tool;
   document.getElementById('btn-measure').classList.toggle('active',activeTool==='measure');
   document.getElementById('btn-text').classList.toggle('active',activeTool==='text');
+  document.getElementById('btn-hline').classList.toggle('active',activeTool==='hline');
+  document.getElementById('btn-vline').classList.toggle('active',activeTool==='vline');
+  document.getElementById('btn-tline').classList.toggle('active',activeTool==='tline');
   document.getElementById('chartbox').style.cursor = activeTool?'crosshair':'default';
   measureState=null; hideMeasureTooltip();
   if(!activeTool||!chart) return;
@@ -705,6 +755,15 @@ function setTool(tool){
       else{ drawMeasureLine(measureState.x,measureState.y,x,y); showMeasureTooltip(x,y,measureState.price,price,measureState.time,time); measureState=null; }
     }
     if(activeTool==='text') addTextAnnotation(x,y);
+    if(activeTool==='hline') addHorizontalLine(price);
+    if(activeTool==='vline') addVerticalLine(time);
+    if(activeTool==='tline'){
+      if(!measureState){ measureState={x,y,price,time}; }
+      else{
+        addTrendLine(measureState.x,measureState.y,measureState.price,measureState.time,x,y,price,time);
+        clearCanvas(); hideMeasureTooltip(); measureState=null;
+      }
+    }
   };
 
   chartMoveHandler = param=>{
@@ -724,12 +783,18 @@ function setTool(tool){
 function clearAll(){
   clearCanvas();
   annotations.forEach(a=>a.remove());
-  annotations=[]; measureState=null; hideMeasureTooltip();
+  annotations=[];
+  drawingLines.forEach(d=>{ try{ chart.removeSeries(d.series); }catch{} });
+  drawingLines=[];
+  measureState=null; hideMeasureTooltip();
   document.getElementById('text-input-container').style.display='none';
 }
 
 document.getElementById('btn-measure').addEventListener('click',()=>setTool('measure'));
 document.getElementById('btn-text').addEventListener('click',()=>setTool('text'));
+document.getElementById('btn-hline').addEventListener('click',()=>setTool('hline'));
+document.getElementById('btn-vline').addEventListener('click',()=>setTool('vline'));
+document.getElementById('btn-tline').addEventListener('click',()=>setTool('tline'));
 document.getElementById('btn-clear').addEventListener('click',()=>clearAll());
 </script>
 </body>
