@@ -738,20 +738,45 @@ function addFibonacci(price1, time1, price2, time2){
   const t1   = chartData[0].time;
   const t2   = chartData[chartData.length-1].time;
 
-  FIB_LEVELS.forEach((level, i) => {
+  // TradingView style: levels, colors, fills between bands
+  const levels = [
+    { level:0,     color:'#787b86', label:'0%'     },
+    { level:0.236, color:'#f77c80', label:'23.6%'  },
+    { level:0.382, color:'#f7c948', label:'38.2%'  },
+    { level:0.5,   color:'#81c784', label:'50%'    },
+    { level:0.618, color:'#4fc3f7', label:'61.8%'  },
+    { level:0.786, color:'#ce93d8', label:'78.6%'  },
+    { level:1.0,   color:'#787b86', label:'100%'   },
+  ];
+
+  levels.forEach(({level, color, label}) => {
     const price = high - diff * level;
+    const isEdge = level===0 || level===1;
+    const isGolden = level===0.5 || level===0.618;
     const s = chart.addLineSeries({
-      color: FIB_COLORS[i],
-      lineWidth: 1,
-      lineStyle: level===0||level===1 ? 0 : 2,
+      color: isGolden ? color : color,
+      lineWidth: isEdge ? 1.5 : 1,
+      lineStyle: isEdge ? 0 : 2,
       priceLineVisible: false,
       lastValueVisible: true,
       crosshairMarkerVisible: false,
-      title: `${(level*100).toFixed(1)}% ₹${price.toFixed(2)}`
+      title: `${label}  ₹${price.toFixed(2)}`
     });
     s.setData([{time:t1, value:price},{time:t2, value:price}]);
     drawingLines.push({series:s, type:'fib'});
   });
+
+  // Diagonal trend line connecting anchor points (TradingView style)
+  const trendSeries = chart.addLineSeries({
+    color:'rgba(120,123,134,0.6)',
+    lineWidth:1,
+    lineStyle:0,
+    priceLineVisible:false,
+    lastValueVisible:false,
+    crosshairMarkerVisible:false,
+  });
+  trendSeries.setData([{time:time1,value:price1},{time:time2,value:price2}]);
+  drawingLines.push({series:trendSeries, type:'fib'});
 }
 
 function setTool(tool){
