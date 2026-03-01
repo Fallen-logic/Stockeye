@@ -177,6 +177,7 @@
             <button class="cb ind-btn" data-ind="ma200">MA 200</button>
             <button class="cb ind-btn" data-ind="rsi">RSI</button>
             <button class="cb ind-btn" data-ind="macd">MACD</button>
+            <button class="cb ind-btn" data-ind="patterns">PATTERNS</button>
           </div>
           <div class="sep"></div>
           <div class="ctrl-grp" id="toolGrp">
@@ -242,7 +243,7 @@ const STOCKS=[
 ];
 
 let prices={},active=null,tf='1D',ct='candlestick',chart=null;
-let indicators={vol:true,ma20:false,ma50:false,ma200:false,rsi:false,macd:false};
+let indicators={vol:true,ma20:false,ma50:false,ma200:false,rsi:false,macd:false,patterns:false};
 let rsiChart=null,macdChart=null;
 
 async function apiFetch(path, opts={}){
@@ -472,6 +473,81 @@ async function renderChart(){
     if(indicators.ma200 && norm.length>=200){
       const s=chart.addLineSeries({color:'#fc8181',lineWidth:1,priceLineVisible:false,lastValueVisible:true,crosshairMarkerVisible:false});
       s.setData(calcMA(norm,200));
+    }
+
+    // Candlestick Pattern Detection
+    if(indicators.patterns && norm.length>=3){
+      const markers = [];
+
+      for(let i=1;i<norm.length;i++){
+        const c = norm[i];       // current candle
+        const p = norm[i-1];     // previous candle
+        const body    = Math.abs(c.close-c.open);
+        const range   = c.high-c.low;
+        const pBody   = Math.abs(p.close-p.open);
+        const upperWick = c.high - Math.max(c.close,c.open);
+        const lowerWick = Math.min(c.close,c.open) - c.low;
+        const isBullC = c.close > c.open;
+        const isBullP = p.close > p.open;
+
+        // Doji — body < 10% of range
+        if(range>0 && body/range < 0.1){
+          markers.push({time:c.time, position:'aboveBar', color:'#f7c948', shape:'circle', text:'Doji'});
+          continue;
+        }
+
+        // Hammer — small body at top, long lower wick (bullish reversal)
+        if(lowerWick > body*2 && upperWick < body*0.5 && range>0){
+          markers.push({time:c.time, position:'belowBar', color:'#00e5a0', shape:'arrowUp', text:'Hammer'});
+          continue;
+        }
+
+        // Shooting Star — small body at bottom, long upper wick (bearish reversal)
+        if(upperWick > body*2 && lowerWick < body*0.5 && range>0){
+          markers.push({time:c.time, position:'aboveBar', color:'#ff4d6d', shape:'arrowDown', text:'Shooting Star'});
+          continue;
+        }
+
+        // Bullish Engulfing — bearish prev, bullish current that engulfs
+        if(!isBullP && isBullC && c.open < p.close && c.close > p.open && body > pBody){
+          markers.push({time:c.time, position:'belowBar', color:'#00e5a0', shape:'arrowUp', text:'Bull Engulf'});
+          continue;
+        }
+
+        // Bearish Engulfing — bullish prev, bearish current that engulfs
+        if(isBullP && !isBullC && c.open > p.close && c.close < p.open && body > pBody){
+          markers.push({time:c.time, position:'aboveBar', color:'#ff4d6d', shape:'arrowDown', text:'Bear Engulf'});
+          continue;
+        }
+
+        // Morning Star (3 candle) — big bearish, small body, big bullish
+        if(i>=2){
+          const pp = norm[i-2];
+          const ppBody = Math.abs(pp.close-pp.open);
+          const midBody = Math.abs(p.close-p.open);
+          if(!isBullP && isBullC && ppBody>midBody*2 && body>midBody*2 && pp.close<pp.open && c.close>c.open){
+            markers.push({time:c.time, position:'belowBar', color:'#00e5a0', shape:'arrowUp', text:'Morning Star'});
+            continue;
+          }
+          // Evening Star — opposite
+          if(isBullP && !isBullC && ppBody>midBody*2 && body>midBody*2 && pp.close>pp.open && c.close<c.open){
+            markers.push({time:c.time, position:'aboveBar', color:'#ff4d6d', shape:'arrowDown', text:'Evening Star'});
+            continue;
+          }
+        }
+
+        // Marubozu — full body, tiny wicks (strong momentum)
+        if(range>0 && body/range>0.9){
+          const color = isBullC?'#00e5a0':'#ff4d6d';
+          const pos   = isBullC?'belowBar':'aboveBar';
+          const shape = isBullC?'arrowUp':'arrowDown';
+          markers.push({time:c.time, position:pos, color, shape, text:isBullC?'Bull Marubozu':'Bear Marubozu'});
+        }
+      }
+
+      if(markers.length>0 && mainSeries.setMarkers){
+        mainSeries.setMarkers(markers);
+      }
     }
 
   }catch(e){
