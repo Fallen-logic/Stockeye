@@ -185,6 +185,7 @@
             <button class="cb tool-btn" id="btn-hline" title="Horizontal Line">— H-LINE</button>
             <button class="cb tool-btn" id="btn-vline" title="Vertical Line">| V-LINE</button>
             <button class="cb tool-btn" id="btn-tline" title="Trend Line">/ TREND</button>
+            <button class="cb tool-btn" id="btn-fib" title="Fibonacci Retracement">🌀 FIB</button>
             <button class="cb tool-btn" id="btn-clear" title="Clear All">✕ CLEAR</button>
           </div>
         </div>
@@ -612,6 +613,8 @@ let chartData = [];
 let chartClickHandler = null;
 let chartMoveHandler = null;
 let drawingLines = []; // stores {series, type} for drawn lines
+const FIB_LEVELS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1.0];
+const FIB_COLORS = ['#e8c547','#00e5a0','#63b3ed','#a78bfa','#fc8181','#f6ad55','#e8c547'];
 
 function syncCanvas(){
   const box = document.getElementById('chartbox');
@@ -727,6 +730,30 @@ function addTrendLine(x1,y1,price1,time1,x2,y2,price2,time2){
   drawingLines.push({series:s, type:'tline'});
 }
 
+function addFibonacci(price1, time1, price2, time2){
+  if(!chart||!chartData.length) return;
+  const high = Math.max(price1, price2);
+  const low  = Math.min(price1, price2);
+  const diff = high - low;
+  const t1   = chartData[0].time;
+  const t2   = chartData[chartData.length-1].time;
+
+  FIB_LEVELS.forEach((level, i) => {
+    const price = high - diff * level;
+    const s = chart.addLineSeries({
+      color: FIB_COLORS[i],
+      lineWidth: 1,
+      lineStyle: level===0||level===1 ? 0 : 2,
+      priceLineVisible: false,
+      lastValueVisible: true,
+      crosshairMarkerVisible: false,
+      title: `${(level*100).toFixed(1)}% ₹${price.toFixed(2)}`
+    });
+    s.setData([{time:t1, value:price},{time:t2, value:price}]);
+    drawingLines.push({series:s, type:'fib'});
+  });
+}
+
 function setTool(tool){
   // Unsubscribe old chart handlers first
   if(chart){
@@ -739,6 +766,7 @@ function setTool(tool){
   document.getElementById('btn-hline').classList.toggle('active',activeTool==='hline');
   document.getElementById('btn-vline').classList.toggle('active',activeTool==='vline');
   document.getElementById('btn-tline').classList.toggle('active',activeTool==='tline');
+  document.getElementById('btn-fib').classList.toggle('active',activeTool==='fib');
   document.getElementById('chartbox').style.cursor = activeTool?'crosshair':'default';
   measureState=null; hideMeasureTooltip();
   if(!activeTool||!chart) return;
@@ -764,6 +792,13 @@ function setTool(tool){
         clearCanvas(); measureState=null;
       }
     }
+    if(activeTool==='fib'){
+      if(!measureState){ measureState={x,y,price,time}; }
+      else{
+        addFibonacci(measureState.price,measureState.time,price,time);
+        clearCanvas(); measureState=null;
+      }
+    }
   };
 
   chartMoveHandler = param=>{
@@ -776,7 +811,7 @@ function setTool(tool){
       drawMeasureLine(measureState.x,measureState.y,x,y);
       showMeasureTooltip(x,y,measureState.price,price,measureState.time,time);
     }
-    if(activeTool==='tline'&&measureState){
+    if((activeTool==='tline'||activeTool==='fib')&&measureState){
       drawMeasureLine(measureState.x,measureState.y,x,y);
     }
   };
@@ -800,6 +835,7 @@ document.getElementById('btn-text').addEventListener('click',()=>setTool('text')
 document.getElementById('btn-hline').addEventListener('click',()=>setTool('hline'));
 document.getElementById('btn-vline').addEventListener('click',()=>setTool('vline'));
 document.getElementById('btn-tline').addEventListener('click',()=>setTool('tline'));
+document.getElementById('btn-fib').addEventListener('click',()=>setTool('fib'));
 document.getElementById('btn-clear').addEventListener('click',()=>clearAll());
 
 
