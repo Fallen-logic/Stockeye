@@ -692,6 +692,7 @@ function addHorizontalLine(price, save=true){
   const s = chart.addLineSeries({
     color:'rgba(99,179,237,0.8)', lineWidth:1, lineStyle:2,
     priceLineVisible:false, lastValueVisible:true, crosshairMarkerVisible:false,
+    autoscaleInfoProvider:()=>null,
     title: '₹'+price.toFixed(2)
   });
   s.setData([
@@ -709,7 +710,8 @@ function addVerticalLine(time, save=true){
   const maxP = Math.max(...prices)*1.005;
   const s = chart.addLineSeries({
     color:'rgba(247,201,72,0.7)', lineWidth:1, lineStyle:2,
-    priceLineVisible:false, lastValueVisible:false, crosshairMarkerVisible:false
+    priceLineVisible:false, lastValueVisible:false, crosshairMarkerVisible:false,
+    autoscaleInfoProvider:()=>null
   });
   s.setData([{time, value:minP},{time, value:maxP}]);
   drawingLines.push({series:s, type:'vline'});
@@ -725,7 +727,8 @@ function addTrendLine(x1,y1,price1,time1,x2,y2,price2,time2,save=true){
   const extP2 = price1 + slope*(t2-time1);
   const s = chart.addLineSeries({
     color:'rgba(160,120,255,0.9)', lineWidth:1.5,
-    priceLineVisible:false, lastValueVisible:false, crosshairMarkerVisible:false
+    priceLineVisible:false, lastValueVisible:false, crosshairMarkerVisible:false,
+    autoscaleInfoProvider:()=>null
   });
   s.setData([{time:t1,value:extP1},{time:t2,value:extP2}]);
   drawingLines.push({series:s, type:'tline'});
@@ -871,7 +874,8 @@ function addFibonacci(price1, time1, price2, time2, save=true){
       priceLineVisible: false,
       lastValueVisible: true,
       crosshairMarkerVisible: false,
-      title: `${label}  ₹${price.toFixed(2)}`
+      title: `${label}  ₹${price.toFixed(2)}`,
+      autoscaleInfoProvider: () => null,
     });
     s.setData([{time:t1, value:price},{time:t2, value:price}]);
     drawingLines.push({series:s, type:'fib'});
@@ -885,6 +889,7 @@ function addFibonacci(price1, time1, price2, time2, save=true){
     priceLineVisible:false,
     lastValueVisible:false,
     crosshairMarkerVisible:false,
+    autoscaleInfoProvider: () => null,
   });
   trendSeries.setData([{time:time1,value:price1},{time:time2,value:price2}]);
   drawingLines.push({series:trendSeries, type:'fib'});
