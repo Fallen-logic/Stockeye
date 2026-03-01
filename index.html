@@ -757,7 +757,13 @@ function setTool(tool){
     if(activeTool==='text') addTextAnnotation(x,y);
     if(activeTool==='hline') addHorizontalLine(price);
     if(activeTool==='vline') addVerticalLine(time);
-    // tline uses drag (mousedown/mouseup), not click
+    if(activeTool==='tline'){
+      if(!measureState){ measureState={x,y,price,time}; }
+      else{
+        addTrendLine(measureState.x,measureState.y,measureState.price,measureState.time,x,y,price,time);
+        clearCanvas(); measureState=null;
+      }
+    }
   };
 
   chartMoveHandler = param=>{
@@ -770,7 +776,7 @@ function setTool(tool){
       drawMeasureLine(measureState.x,measureState.y,x,y);
       showMeasureTooltip(x,y,measureState.price,price,measureState.time,time);
     }
-    if(activeTool==='tline'&&measureState&&measureState.dragging){
+    if(activeTool==='tline'&&measureState){
       drawMeasureLine(measureState.x,measureState.y,x,y);
     }
   };
@@ -796,25 +802,7 @@ document.getElementById('btn-vline').addEventListener('click',()=>setTool('vline
 document.getElementById('btn-tline').addEventListener('click',()=>setTool('tline'));
 document.getElementById('btn-clear').addEventListener('click',()=>clearAll());
 
-// Drag-to-draw for trend line — mousedown on chartbox to start, mouseup to finish
-document.getElementById('chartbox').addEventListener('mousedown', e=>{
-  if(activeTool!=='tline'||!chart||!window._mainSeries) return;
-  const rect=document.getElementById('chartbox').getBoundingClientRect();
-  const x=e.clientX-rect.left, y=e.clientY-rect.top;
-  const price=window._mainSeries.coordinateToPrice(y);
-  const time=chart.timeScale().coordinateToTime(x)||0;
-  measureState={x,y,price,time,dragging:true};
-});
 
-document.getElementById('chartbox').addEventListener('mouseup', e=>{
-  if(activeTool!=='tline'||!measureState||!measureState.dragging||!chart||!window._mainSeries) return;
-  const rect=document.getElementById('chartbox').getBoundingClientRect();
-  const x=e.clientX-rect.left, y=e.clientY-rect.top;
-  const price=window._mainSeries.coordinateToPrice(y);
-  const time=chart.timeScale().coordinateToTime(x)||0;
-  addTrendLine(measureState.x,measureState.y,measureState.price,measureState.time,x,y,price,time);
-  clearCanvas(); measureState=null;
-});
 </script>
 </body>
 </html>
