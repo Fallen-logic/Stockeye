@@ -262,5 +262,37 @@ def get_stats(ticker):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+import json as _json, os as _os
+
+DRAWINGS_FILE = '/tmp/drawings.json'
+
+def load_drawings():
+    try:
+        if _os.path.exists(DRAWINGS_FILE):
+            with open(DRAWINGS_FILE) as f:
+                return _json.load(f)
+    except: pass
+    return {}
+
+def save_drawings(data):
+    try:
+        with open(DRAWINGS_FILE, 'w') as f:
+            _json.dump(data, f)
+    except: pass
+
+@app.route("/drawings/<ticker>/<tf>", methods=["GET"])
+def get_drawings(ticker, tf):
+    data = load_drawings()
+    key = f"{ticker.upper()}_{tf}"
+    return jsonify(data.get(key, []))
+
+@app.route("/drawings/<ticker>/<tf>", methods=["POST"])
+def set_drawings(ticker, tf):
+    data = load_drawings()
+    key = f"{ticker.upper()}_{tf}"
+    data[key] = request.json
+    save_drawings(data)
+    return jsonify({"ok": True})
+
 if __name__ == "__main__":
     app.run(debug=False)
