@@ -208,6 +208,29 @@ def _save_cache(cache):
             json.dump(cache, f)
     except: pass
 
+# NSE symbol map for equity stocks
+NSE_MAP = {
+    "TCS": "TCS", "SBI": "SBIN", "HDFC": "HDFCBANK", "ICICI": "ICICIBANK",
+    "TITAN": "TITAN", "INFOSYS": "INFY", "CIPLA": "CIPLA",
+    "ULTRATECH": "ULTRACEMCO", "RELIANCE": "RELIANCE",
+}
+NSE_INDEX_MAP = {
+    "NIFTY": "NIFTY 50", "BANKNIFTY": "NIFTY BANK", "INDIAVIX": "INDIA VIX",
+}
+NSE_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Accept": "application/json",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer": "https://www.nseindia.com",
+}
+
+def get_nse_session():
+    s = req.Session()
+    base_headers = {**NSE_HEADERS, "Accept": "text/html,application/xhtml+xml"}
+    s.get("https://www.nseindia.com", headers=base_headers, timeout=10)
+    s.get("https://www.nseindia.com/market-data/live-equity-market", headers=base_headers, timeout=10)
+    return s
+
 @app.route("/stats/<ticker>")
 def get_stats(ticker):
     yf_sym = TICKER_MAP.get(ticker.upper())
@@ -219,46 +242,113 @@ def get_stats(ticker):
     if cached and (_time.time() - cached.get("_ts", 0)) < 43200:
         return jsonify(cached)
 
-    try:
-        info = yf.Ticker(yf_sym).info
-        def safe(key, fmt=None):
-            val = info.get(key)
-            if val is None or val == "N/A":
-                return "—"
-            try:
-                if fmt == "cr":
-                    return f"₹{round(val/1e7, 2):,} Cr"
-                if fmt == "pct":
-                    return f"{round(val*100, 2)}%"
-                if fmt == "2f":
-                    return f"{round(val, 2)}"
-                if fmt == "vol":
-                    if val >= 1e7: return f"{round(val/1e7,2)}Cr"
-                    if val >= 1e5: return f"{round(val/1e5,2)}L"
-                    return str(val)
-                return str(val)
-            except:
-                return "—"
+    def fmt_cr(val):
+        try:
+            v = float(val)
+            if v > 0: return f"₹{round(v/1e7, 2):,} Cr"
+        except: pass
+        return "—"
 
-        result = {
-            "ticker":      ticker,
-            "market_cap":  safe("marketCap", "cr"),
-            "pe_ratio":    safe("trailingPE", "2f"),
-            "eps":         safe("trailingEps", "2f"),
-            "week52_high": safe("fiftyTwoWeekHigh", "2f"),
-            "week52_low":  safe("fiftyTwoWeekLow", "2f"),
-            "beta":        safe("beta", "2f"),
-            "div_yield":   safe("dividendYield", "pct"),
-            "volume":      safe("volume", "vol"),
-            "avg_volume":  safe("averageVolume", "vol"),
-            "sector":      info.get("sector", "—"),
-            "industry":    info.get("industry", "—"),
-            "yf_symbol":   yf_sym,
-            "_ts":         _time.time(),
-        }
+    def fmt_vol(val):
+        try:
+            v = float(val)
+            if v >= 1e7: return f"{round(v/1e7,2)}Cr"
+            if v >= 1e5: return f"{round(v/1e5,2)}L"
+            return str(int(v))
+        except: pass
+        return "—"
+
+    def fmt_f(val, dec=2):
+        try:
+            if val not in (None, "", "—", 0):
+                return str(round(float(val), dec))
+        except: pass
+        return "—"
+
+    try:
+        nse_sym  = NSE_MAP.get(ticker.upper())
+        idx_name = NSE_INDEX_MAP.get(ticker.upper())
+
+        if nse_sym:
+            s = get_nse_session()
+            r = s.get(
+                f"https://www.nseindia.com/api/quote-equity?symbol={nse_sym}",
+                headers=NSE_HEADERS, timeout=10
+            )
+            data    = r.json()
+            info    = data.get("priceInfo", {})
+            meta    = data.get("metadata", {})
+            secInfo = data.get("securityInfo", {})
+            indInfo = data.get("industryInfo", {})
+            w52     = info.get("weekHighLow", {})
+            # Market cap = issued shares × LTP
+            issued  = secInfo.get("issuedSize", 0)
+            ltp     = info.get("lastPrice", 0)
+            mcap    = fmt_cr(float(issued) * float(ltp)) if issued and ltp else "—"
+
+            result = {
+                "ticker":      ticker,
+                "market_cap":  mcap,
+                "pe_ratio":    fmt_f(meta.get("pdSymbolPe")),
+                "eps":         "—",
+                "week52_high": f"₹{fmt_f(w52.get('max'))}",
+                "week52_low":  f"₹{fmt_f(w52.get('min'))}",
+                "beta":        "—",
+                "div_yield":   "—",
+                "volume":      fmt_vol(info.get("totalTradedVolume")),
+                "avg_volume":  "—",
+                "sector":      indInfo.get("sector", "—"),
+                "industry":    indInfo.get("industry", "—"),
+                "yf_symbol":   yf_sym,
+                "_ts":         _time.time(),
+            }
+
+        elif idx_name:
+            s = get_nse_session()
+            r = s.get("https://www.nseindia.com/api/allIndices", headers=NSE_HEADERS, timeout=10)
+            items = r.json().get("data", [])
+            data  = next((x for x in items if x.get("index") == idx_name), {})
+            result = {
+                "ticker":      ticker,
+                "market_cap":  "—",
+                "pe_ratio":    fmt_f(data.get("pe")),
+                "eps":         fmt_f(data.get("eps")),
+                "week52_high": f"₹{fmt_f(data.get('yearHigh'))}",
+                "week52_low":  f"₹{fmt_f(data.get('yearLow'))}",
+                "beta":        "—",
+                "div_yield":   fmt_f(data.get("dy")) + "%" if data.get("dy") else "—",
+                "volume":      "—",
+                "avg_volume":  "—",
+                "sector":      "Index",
+                "industry":    "—",
+                "yf_symbol":   yf_sym,
+                "_ts":         _time.time(),
+            }
+
+        else:
+            # SENSEX — yfinance fast_info fallback
+            fi = yf.Ticker(yf_sym).fast_info
+            result = {
+                "ticker":      ticker,
+                "market_cap":  "—",
+                "pe_ratio":    "—",
+                "eps":         "—",
+                "week52_high": fmt_f(getattr(fi, "year_high", None)),
+                "week52_low":  fmt_f(getattr(fi, "year_low", None)),
+                "beta":        "—",
+                "div_yield":   "—",
+                "volume":      "—",
+                "avg_volume":  "—",
+                "sector":      "Index",
+                "industry":    "—",
+                "yf_symbol":   yf_sym,
+                "_ts":         _time.time(),
+            }
+
         cache[ticker] = result
         _save_cache(cache)
         return jsonify(result)
+
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
