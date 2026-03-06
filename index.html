@@ -33,10 +33,10 @@
     display:none;align-items:center;gap:8px;}
   .api-banner.show{display:flex;}
 
-  .wrap{position:relative;z-index:1;max-width:1400px;margin:0 auto;padding:24px 20px;}
+  .wrap{position:relative;z-index:1;max-width:1400px;margin:0 auto;padding:28px 24px;}
 
-  .ticker{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 16px;
-    margin-bottom:24px;display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;}
+  .ticker{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px 16px;
+    margin-bottom:28px;display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;}
   .ticker::-webkit-scrollbar{display:none;}
   .ti{display:flex;flex-direction:column;align-items:center;gap:1px;padding:6px 10px;border-radius:7px;
     cursor:pointer;transition:all .15s;min-width:fit-content;white-space:nowrap;}
@@ -47,11 +47,11 @@
   .ti-chg{font-family:'Space Mono',monospace;font-size:9px;}
   .up{color:var(--up);} .down{color:var(--down);}
 
-  .layout{display:grid;grid-template-columns:300px 1fr;gap:20px;}
+  .layout{display:grid;grid-template-columns:300px 1fr;gap:24px;}
   @media(max-width:900px){.layout{grid-template-columns:1fr;}}
 
-  .sidebar{display:flex;flex-direction:column;gap:8px;}
-  .card{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;
+  .sidebar{display:flex;flex-direction:column;gap:10px;}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;
     cursor:pointer;transition:all .15s;}
   .card:hover{border-color:rgba(0,229,160,.2);transform:translateX(2px);}
   .card.active{border-color:var(--accent);background:rgba(0,229,160,.04);}
@@ -64,8 +64,8 @@
   .card-bar{height:2px;background:var(--border);}
   .card-bar-fill{height:100%;transition:width .5s;}
 
-  .chart-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;}
-  .chart-top{padding:18px 22px 14px;border-bottom:1px solid var(--border);display:flex;
+  .chart-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;}
+  .chart-top{padding:20px 24px 16px;border-bottom:1px solid var(--border);display:flex;
     justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;}
   .ct-left h2{font-size:26px;font-weight:800;letter-spacing:-1px;}
   .ct-left p{font-size:11px;color:var(--muted);margin-top:3px;font-family:'Space Mono',monospace;}
@@ -73,7 +73,7 @@
   .big-price{font-family:'Space Mono',monospace;font-size:28px;font-weight:700;}
   .big-chg{font-family:'Space Mono',monospace;font-size:12px;margin-top:3px;}
 
-  .ctrl-bar{padding:10px 22px;border-bottom:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+  .ctrl-bar{padding:10px 24px;border-bottom:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
   .ctrl-grp{display:flex;gap:2px;background:var(--surface2);border-radius:7px;padding:3px;}
   .cb{background:none;border:none;color:var(--muted);padding:5px 11px;border-radius:5px;
     font-family:'Space Mono',monospace;font-size:10px;cursor:pointer;transition:all .15s;}
@@ -92,7 +92,7 @@
   .ov-icon{font-size:32px;}
 
   .stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--border);border-top:1px solid var(--border);}
-  .stat{background:var(--surface);padding:12px 16px;}
+  .stat{background:var(--surface);padding:14px 18px;}
   .stat-label{font-size:9px;color:var(--muted);font-family:'Space Mono',monospace;letter-spacing:.8px;margin-bottom:4px;}
   .stat-val{font-family:'Space Mono',monospace;font-size:13px;font-weight:700;}
   @media(max-width:600px){.stats-row{grid-template-columns:repeat(2,1fr);}#chartbox{height:280px;}.big-price{font-size:20px;}}
@@ -108,7 +108,7 @@
   .yf-btn:hover{background:rgba(99,179,237,.2);}
 
   /* Key stats panel */
-  .key-stats{border-top:1px solid var(--border);padding:14px 20px;
+  .key-stats{border-top:1px solid var(--border);padding:16px 24px;
     display:grid;grid-template-columns:repeat(5,1fr);gap:8px;background:var(--surface2);}
   .ks{display:flex;flex-direction:column;gap:3px;}
   .ks-label{font-size:9px;color:var(--muted);font-family:'Space Mono',monospace;letter-spacing:.8px;}
