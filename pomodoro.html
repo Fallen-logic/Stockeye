@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pomo — Focus Timer</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:       #0a0a0f;
+    --surface:  #111118;
+    --surface2: #18181f;
+    --border:   #222230;
+    --accent:   #e8c547;
+    --up:       #00e5a0;
+    --dn:       #ff4d6d;
+    --muted:    #44445a;
+    --text:     #e0e0f0;
+    --work-color: #e8c547;
+    --break-color: #00e5a0;
+    --long-color:  #63b3ed;
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* Grain overlay */
+  body::before {
+    content:'';
+    position:fixed;
+    inset:0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events:none;
+    z-index:0;
+  }
+
+  /* Ambient glow behind timer */
+  .glow {
+    position: fixed;
+    width: 500px;
+    height: 500px;
+    border-radius: 50%;
+    filter: blur(120px);
+    opacity: 0.07;
+    pointer-events: none;
+    transition: background 1s ease;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 0;
+  }
+
+  .container {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 460px;
+    padding: 24px 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+  }
+
+  /* Header */
+  .header {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    width: 100%;
+    justify-content: center;
+  }
+  .logo {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 28px;
+    letter-spacing: 4px;
+    color: var(--accent);
+  }
+  .logo span { color: var(--muted); }
+
+  /* Mode tabs */
+  .mode-tabs {
+    display: flex;
+    gap: 4px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 4px;
+    width: 100%;
+  }
+  .mode-tab {
+    flex: 1;
+    padding: 7px 4px;
+    border: none;
+    background: none;
+    color: var(--muted);
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 1px;
+    cursor: pointer;
+    border-radius: 5px;
+    transition: all 0.2s;
+    text-transform: uppercase;
+  }
+  .mode-tab.active {
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+  .mode-tab.work.active   { color: var(--work-color); border-color: rgba(232,197,71,0.3); }
+  .mode-tab.brk.active    { color: var(--break-color); border-color: rgba(0,229,160,0.3); }
+  .mode-tab.long.active   { color: var(--long-color); border-color: rgba(99,179,237,0.3); }
+
+  /* Timer ring */
+  .timer-wrap {
+    position: relative;
+    width: 240px;
+    height: 240px;
+  }
+  .timer-svg {
+    width: 100%;
+    height: 100%;
+    transform: rotate(-90deg);
+  }
+  .timer-track {
+    fill: none;
+    stroke: var(--surface2);
+    stroke-width: 6;
+  }
+  .timer-ring {
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 6;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 1s linear, stroke 0.5s ease;
+  }
+  .timer-inner {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+  }
+  .timer-display {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 64px;
+    letter-spacing: 4px;
+    line-height: 1;
+    transition: color 0.5s;
+  }
+  .timer-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 3px;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+
+  /* Session dots */
+  .session-dots {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--border);
+    transition: all 0.3s;
+  }
+  .dot.done { background: var(--accent); }
+  .dot.current {
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent);
+    animation: pulse 1s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%,100% { transform: scale(1); opacity:1; }
+    50% { transform: scale(1.3); opacity:0.7; }
+  }
+  .dot-sep {
+    width: 1px;
+    height: 12px;
+    background: var(--border);
+  }
+
+  /* Controls */
+  .controls {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+  .btn {
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: all 0.15s;
+    text-transform: uppercase;
+  }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-main {
+    padding: 14px 40px;
+    font-size: 12px;
+    letter-spacing: 3px;
+    background: var(--surface2);
+  }
+  .btn-main.running {
+    border-color: rgba(255,77,109,0.5);
+    color: var(--dn);
+  }
+  .btn-sm { padding: 10px 16px; }
+
+  /* Settings panel */
+  .settings-toggle {
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 2px;
+    color: var(--muted);
+    background: none;
+    border: none;
+    cursor: pointer;
+    text-transform: uppercase;
+    transition: color 0.2s;
+  }
+  .settings-toggle:hover { color: var(--text); }
+
+  .settings-panel {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    display: none;
+    gap: 12px;
+    flex-direction: column;
+  }
+  .settings-panel.open { display: flex; }
+
+  .settings-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+  }
+  .settings-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 2px;
+    color: var(--muted);
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .settings-input-wrap {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .btn-num {
+    width: 26px;
+    height: 26px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--text);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+  }
+  .btn-num:hover { border-color: var(--accent); color: var(--accent); }
+  .num-val {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 22px;
+    letter-spacing: 2px;
+    min-width: 36px;
+    text-align: center;
+    color: var(--accent);
+  }
+
+  /* Sound toggle */
+  .toggle-wrap { display: flex; align-items: center; gap: 8px; }
+  .toggle {
+    width: 36px;
+    height: 20px;
+    background: var(--border);
+    border-radius: 10px;
+    cursor: pointer;
+    position: relative;
+    transition: background 0.2s;
+    border: none;
+  }
+  .toggle::after {
+    content:'';
+    position:absolute;
+    width:14px; height:14px;
+    background:#fff;
+    border-radius:50%;
+    top:3px; left:3px;
+    transition: transform 0.2s;
+  }
+  .toggle.on { background: var(--up); }
+  .toggle.on::after { transform: translateX(16px); }
+
+  /* Status bar */
+  .status-bar {
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 2px;
+    color: var(--muted);
+    text-align: center;
+  }
+  .status-bar span { color: var(--accent); }
+
+  /* Notification toast */
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: var(--surface2);
+    border: 1px solid var(--accent);
+    border-radius: 8px;
+    padding: 12px 24px;
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 1px;
+    color: var(--accent);
+    transition: transform 0.3s ease;
+    z-index: 100;
+    white-space: nowrap;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<div class="glow" id="glow"></div>
+
+<div class="container">
+
+  <div class="header">
+    <div class="logo">POMO<span>•</span>FOCUS</div>
+  </div>
+
+  <!-- Mode tabs -->
+  <div class="mode-tabs">
+    <button class="mode-tab work active" onclick="switchMode('work')">⚡ Work</button>
+    <button class="mode-tab brk" onclick="switchMode('break')">☕ Break</button>
+    <button class="mode-tab long" onclick="switchMode('long')">🌙 Long Break</button>
+  </div>
+
+  <!-- Timer ring -->
+  <div class="timer-wrap">
+    <svg class="timer-svg" viewBox="0 0 240 240">
+      <circle class="timer-track" cx="120" cy="120" r="108"/>
+      <circle class="timer-ring" id="timerRing" cx="120" cy="120" r="108"/>
+    </svg>
+    <div class="timer-inner">
+      <div class="timer-display" id="timerDisplay">25:00</div>
+      <div class="timer-label" id="timerLabel">FOCUS</div>
+    </div>
+  </div>
+
+  <!-- Session dots -->
+  <div class="session-dots" id="sessionDots"></div>
+
+  <!-- Controls -->
+  <div class="controls">
+    <button class="btn btn-sm" onclick="resetTimer()">↺ RESET</button>
+    <button class="btn btn-main" id="mainBtn" onclick="toggleTimer()">▶ START</button>
+    <button class="btn btn-sm" onclick="skipSession()">↷ SKIP</button>
+  </div>
+
+  <!-- Status -->
+  <div class="status-bar" id="statusBar">SESSION <span id="sessionCount">1</span> OF 4</div>
+
+  <!-- Settings toggle -->
+  <button class="settings-toggle" onclick="toggleSettings()">⚙ SETTINGS</button>
+
+  <!-- Settings panel -->
+  <div class="settings-panel" id="settingsPanel">
+    <div class="settings-row">
+      <span class="settings-label">Work (min)</span>
+      <div class="settings-input-wrap">
+        <button class="btn-num" onclick="adjustSetting('work',-1)">−</button>
+        <div class="num-val" id="val-work">25</div>
+        <button class="btn-num" onclick="adjustSetting('work',1)">+</button>
+      </div>
+    </div>
+    <div class="settings-row">
+      <span class="settings-label">Break (min)</span>
+      <div class="settings-input-wrap">
+        <button class="btn-num" onclick="adjustSetting('break',-1)">−</button>
+        <div class="num-val" id="val-break">5</div>
+        <button class="btn-num" onclick="adjustSetting('break',1)">+</button>
+      </div>
+    </div>
+    <div class="settings-row">
+      <span class="settings-label">Long Break (min)</span>
+      <div class="settings-input-wrap">
+        <button class="btn-num" onclick="adjustSetting('long',-1)">−</button>
+        <div class="num-val" id="val-long">15</div>
+        <button class="btn-num" onclick="adjustSetting('long',1)">+</button>
+      </div>
+    </div>
+    <div class="settings-row">
+      <span class="settings-label">Sessions before long break</span>
+      <div class="settings-input-wrap">
+        <button class="btn-num" onclick="adjustSetting('sessions',-1)">−</button>
+        <div class="num-val" id="val-sessions">4</div>
+        <button class="btn-num" onclick="adjustSetting('sessions',1)">+</button>
+      </div>
+    </div>
+    <div class="settings-row">
+      <span class="settings-label">Sound alerts</span>
+      <div class="toggle-wrap">
+        <button class="toggle on" id="soundToggle" onclick="toggleSound()"></button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── STATE ────────────────────────────────────────────────────────
+const settings = { work:25, break:5, long:15, sessions:4 };
+let mode = 'work'; // 'work' | 'break' | 'long'
+let timeLeft = settings.work * 60;
+let totalTime = settings.work * 60;
+let running = false;
+let interval = null;
+let completedSessions = 0;
+let soundOn = true;
+let sessionInCycle = 0; // 0-indexed within cycle
+
+// ── AUDIO ────────────────────────────────────────────────────────
+const AudioCtx = window.AudioContext || window.webkitAudioContext;
+function beep(freq=880, dur=0.15, type='sine', vol=0.3){
+  if(!soundOn) return;
+  try{
+    const ctx = new AudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.frequency.value = freq;
+    osc.type = type;
+    gain.gain.setValueAtTime(vol, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+dur);
+    osc.start(); osc.stop(ctx.currentTime+dur);
+  }catch(e){}
+}
+function playStart(){ beep(660,0.1); setTimeout(()=>beep(880,0.12),100); }
+function playDone(){
+  beep(880,0.15); setTimeout(()=>beep(1100,0.15),180);
+  setTimeout(()=>beep(1320,0.25),360);
+}
+function playBreakEnd(){
+  beep(440,0.15); setTimeout(()=>beep(550,0.15),150);
+  setTimeout(()=>beep(660,0.25),300);
+}
+
+// ── RING ─────────────────────────────────────────────────────────
+const ring = document.getElementById('timerRing');
+const circumference = 2 * Math.PI * 108;
+ring.style.strokeDasharray = circumference;
+
+function updateRing(){
+  const progress = timeLeft / totalTime;
+  const offset = circumference * (1 - progress);
+  ring.style.strokeDashoffset = offset;
+}
+
+// ── MODE COLORS ──────────────────────────────────────────────────
+const modeConfig = {
+  work:  { color:'var(--work-color)',  label:'FOCUS',      glowColor:'232,197,71'  },
+  break: { color:'var(--break-color)', label:'BREAK',      glowColor:'0,229,160'   },
+  long:  { color:'var(--long-color)',  label:'LONG BREAK', glowColor:'99,179,237'  },
+};
+
+function applyModeStyle(){
+  const cfg = modeConfig[mode];
+  ring.style.stroke = cfg.color;
+  document.getElementById('timerDisplay').style.color = cfg.color;
+  document.getElementById('glow').style.background =
+    `radial-gradient(circle, rgba(${cfg.glowColor},1) 0%, transparent 70%)`;
+}
+
+// ── DISPLAY ──────────────────────────────────────────────────────
+function formatTime(s){
+  const m = Math.floor(s/60).toString().padStart(2,'0');
+  const sec = (s%60).toString().padStart(2,'0');
+  return `${m}:${sec}`;
+}
+
+function updateDisplay(){
+  document.getElementById('timerDisplay').textContent = formatTime(timeLeft);
+  document.getElementById('timerLabel').textContent = modeConfig[mode].label;
+  document.title = `${formatTime(timeLeft)} — ${modeConfig[mode].label}`;
+  updateRing();
+}
+
+// ── SESSION DOTS ─────────────────────────────────────────────────
+function renderDots(){
+  const container = document.getElementById('sessionDots');
+  container.innerHTML = '';
+  const total = settings.sessions;
+  for(let i=0;i<total;i++){
+    if(i===Math.floor(total/2) && total>2){
+      const sep = document.createElement('div');
+      sep.className='dot-sep';
+      container.appendChild(sep);
+    }
+    const dot = document.createElement('div');
+    dot.className='dot';
+    if(i < completedSessions) dot.classList.add('done');
+    else if(i === completedSessions && mode==='work' && running) dot.classList.add('current');
+    container.appendChild(dot);
+  }
+}
+
+// ── TIMER ────────────────────────────────────────────────────────
+function toggleTimer(){
+  if(running){ pause(); } else { start(); }
+}
+
+function start(){
+  running=true;
+  document.getElementById('mainBtn').textContent='⏸ PAUSE';
+  document.getElementById('mainBtn').classList.add('running');
+  playStart();
+  renderDots();
+  interval = setInterval(tick, 1000);
+}
+
+function pause(){
+  running=false;
+  clearInterval(interval);
+  document.getElementById('mainBtn').textContent='▶ RESUME';
+  document.getElementById('mainBtn').classList.remove('running');
+}
+
+function tick(){
+  if(timeLeft <= 0){ onComplete(); return; }
+  timeLeft--;
+  updateDisplay();
+  // Countdown beeps at 3,2,1
+  if(timeLeft <= 3 && timeLeft > 0) beep(440+timeLeft*110, 0.08);
+}
+
+function onComplete(){
+  clearInterval(interval);
+  running=false;
+  document.getElementById('mainBtn').textContent='▶ START';
+  document.getElementById('mainBtn').classList.remove('running');
+
+  if(mode==='work'){
+    completedSessions++;
+    sessionInCycle++;
+    playDone();
+    if(sessionInCycle >= settings.sessions){
+      // Long break time
+      sessionInCycle=0;
+      switchMode('long');
+      showToast('🌙 Long break! You earned it.');
+    } else {
+      switchMode('break');
+      showToast('☕ Break time! Rest up.');
+    }
+    completedSessions = completedSessions % settings.sessions;
+  } else {
+    // Break ended
+    playBreakEnd();
+    switchMode('work');
+    showToast('⚡ Back to work!');
+  }
+  renderDots();
+  updateStatusBar();
+}
+
+function resetTimer(){
+  clearInterval(interval);
+  running=false;
+  document.getElementById('mainBtn').textContent='▶ START';
+  document.getElementById('mainBtn').classList.remove('running');
+  setModeTime();
+  updateDisplay();
+  renderDots();
+}
+
+function skipSession(){
+  clearInterval(interval);
+  running=false;
+  document.getElementById('mainBtn').textContent='▶ START';
+  document.getElementById('mainBtn').classList.remove('running');
+  onComplete();
+}
+
+function setModeTime(){
+  if(mode==='work')  { totalTime = settings.work*60;  }
+  if(mode==='break') { totalTime = settings.break*60; }
+  if(mode==='long')  { totalTime = settings.long*60;  }
+  timeLeft = totalTime;
+}
+
+function switchMode(m){
+  mode=m;
+  // Update tabs
+  document.querySelectorAll('.mode-tab').forEach(t=>t.classList.remove('active'));
+  document.querySelector(`.mode-tab.${m==='work'?'work':m==='break'?'brk':'long'}`).classList.add('active');
+  setModeTime();
+  applyModeStyle();
+  updateDisplay();
+  updateStatusBar();
+}
+
+function updateStatusBar(){
+  const cyclePos = (completedSessions % settings.sessions) + 1;
+  document.getElementById('sessionCount').textContent = cyclePos;
+  document.getElementById('statusBar').innerHTML =
+    `SESSION <span id="sessionCount">${cyclePos}</span> OF ${settings.sessions}`;
+}
+
+// ── SETTINGS ─────────────────────────────────────────────────────
+function toggleSettings(){
+  const panel = document.getElementById('settingsPanel');
+  panel.classList.toggle('open');
+}
+
+function adjustSetting(key, delta){
+  const min = key==='sessions' ? 1 : 1;
+  const max = key==='sessions' ? 10 : 90;
+  settings[key] = Math.max(min, Math.min(max, settings[key]+delta));
+  document.getElementById(`val-${key}`).textContent = settings[key];
+  beep(660,0.06);
+  // If currently in this mode, reset
+  if((key==='work'&&mode==='work')||(key==='break'&&mode==='break')||(key==='long'&&mode==='long')){
+    if(!running) resetTimer();
+  }
+  if(key==='sessions'){ renderDots(); updateStatusBar(); }
+}
+
+function toggleSound(){
+  soundOn = !soundOn;
+  const btn = document.getElementById('soundToggle');
+  btn.classList.toggle('on', soundOn);
+  if(soundOn) beep(660,0.1);
+}
+
+// ── TOAST ────────────────────────────────────────────────────────
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 3000);
+}
+
+// ── INIT ─────────────────────────────────────────────────────────
+applyModeStyle();
+updateDisplay();
+renderDots();
+updateStatusBar();
+</script>
+</body>
+</html>
