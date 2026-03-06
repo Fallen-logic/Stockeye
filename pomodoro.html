@@ -459,7 +459,7 @@ let sessionInCycle = 0; // 0-indexed within cycle
 
 // ── AUDIO ────────────────────────────────────────────────────────
 const AudioCtx = window.AudioContext || window.webkitAudioContext;
-function beep(freq=880, dur=0.15, type='sine', vol=0.3){
+function beep(freq=880, dur=0.15, type='sine', vol=1.0){
   if(!soundOn) return;
   try{
     const ctx = new AudioCtx();
@@ -599,6 +599,8 @@ function onComplete(){
   }
   renderDots();
   updateStatusBar();
+  // Auto-start next session after a brief pause
+  setTimeout(()=>start(), 800);
 }
 
 function resetTimer(){
