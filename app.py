@@ -169,10 +169,10 @@ def get_news():
             return jsonify({"error": f"Feed parse error: {str(pe)}", "raw_preview": raw[:200].decode('utf-8','ignore')}), 500
         items = root.findall(".//item")
         articles = []
+        media_ns = {'media': 'http://search.yahoo.com/mrss/'}
         for item in items[:20]:
             title = item.findtext("title", "").strip()
             link  = item.findtext("link", "").strip()
-            # some feeds use <guid> as link
             if not link:
                 link = item.findtext("guid", "").strip()
             desc  = item.findtext("description", "").strip()
@@ -182,8 +182,23 @@ def get_news():
                 ts = int(parsedate_to_datetime(pub).timestamp()) if pub else 0
             except:
                 ts = 0
+            # Extract image from RSS
+            image = None
+            for tag in ['media:content','media:thumbnail']:
+                el = item.find(tag, media_ns)
+                if el is not None:
+                    image = el.get('url')
+                    if image: break
+            if not image:
+                enc = item.find('enclosure')
+                if enc is not None and enc.get('type','').startswith('image'):
+                    image = enc.get('url')
+            if not image:
+                raw_desc = item.findtext("description","")
+                img_m = re.search(r'<img[^>]+src=["\']([^"\']+)["\']', raw_desc)
+                if img_m: image = img_m.group(1)
             if title:
-                articles.append({"title": title, "link": link, "desc": desc, "pub": pub, "ts": ts})
+                articles.append({"title": title, "link": link, "desc": desc, "pub": pub, "ts": ts, "image": image})
         articles.sort(key=lambda x: x["ts"], reverse=True)
         return jsonify({"category": category, "articles": articles, "feeds": list(NEWS_FEEDS.keys())})
     except Exception as e:
