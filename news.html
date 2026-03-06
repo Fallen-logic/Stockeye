@@ -173,9 +173,9 @@
   .articles { display: flex; flex-direction: column; }
   .article {
     display: grid;
-    grid-template-columns: 1fr auto;
+    grid-template-columns: 1fr 72px;
     gap: 16px;
-    align-items: start;
+    align-items: center;
     padding: 18px 0;
     border-bottom: 1px solid var(--border);
     cursor: pointer;
@@ -184,16 +184,9 @@
     color: inherit;
   }
   .article:hover .art-title { color: var(--accent); }
-  .art-num {
-    font-size: 10px;
-    color: var(--border);
-    font-family: 'Playfair Display', serif;
-    font-weight: 700;
-    margin-bottom: 6px;
-  }
   .art-title {
     font-size: 15px;
-    font-weight: 500;
+    font-weight: 600;
     line-height: 1.4;
     transition: color .15s;
     margin-bottom: 5px;
@@ -203,19 +196,93 @@
     color: #66667a;
     line-height: 1.5;
   }
-  .art-meta {
-    font-size: 10px;
+
+  /* Skeleton screens */
+  @keyframes shimmer {
+    0% { background-position: -600px 0; }
+    100% { background-position: 600px 0; }
+  }
+  .skeleton {
+    background: linear-gradient(90deg, var(--surface) 25%, var(--surface2) 50%, var(--surface) 75%);
+    background-size: 600px 100%;
+    animation: shimmer 1.4s infinite linear;
+    border-radius: 4px;
+  }
+  .skel-featured {
+    padding: 28px 0 24px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .skel-tag   { height: 10px; width: 80px; }
+  .skel-title { height: 28px; width: 90%; border-radius: 4px; }
+  .skel-title-sm { height: 28px; width: 65%; border-radius: 4px; }
+  .skel-desc  { height: 14px; width: 70%; }
+  .skel-desc2 { height: 14px; width: 50%; }
+  .skel-meta  { height: 10px; width: 100px; }
+  .skel-article {
+    display: grid;
+    grid-template-columns: 1fr 72px;
+    gap: 16px;
+    align-items: center;
+    padding: 18px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .skel-article-left { display: flex; flex-direction: column; gap: 8px; }
+  .skel-thumb { width: 72px; height: 56px; border-radius: 6px; flex-shrink: 0; }
+
+  /* Thumbnails */
+  .art-thumb {
+    width: 72px;
+    height: 56px;
+    object-fit: cover;
+    border-radius: 6px;
+    flex-shrink: 0;
+    background: var(--surface2);
+  }
+  .art-thumb-placeholder {
+    width: 72px;
+    height: 56px;
+    border-radius: 6px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    flex-shrink: 0;
+  }
+  .featured-thumb {
+    width: 100%;
+    max-height: 220px;
+    object-fit: cover;
+    border-radius: 8px;
+    margin-bottom: 14px;
+    background: var(--surface2);
+  }
+  .featured-thumb-placeholder {
+    width: 100%;
+    height: 120px;
+    border-radius: 8px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 40px;
+    margin-bottom: 14px;
     color: var(--muted);
-    margin-top: 6px;
+  }
+
+  /* Article source + time */
+  .art-byline {
+    font-size: 10px;
+    color: #888;
+    margin-top: 5px;
     letter-spacing: .2px;
   }
-  .art-arrow {
-    font-size: 16px;
-    color: var(--border);
-    margin-top: 2px;
-    transition: all .15s;
-  }
-  .article:hover .art-arrow { color: var(--accent); transform: translateX(3px); }
+  .art-byline span { color: var(--muted); }
 
   /* Loading / error */
   .state {
@@ -227,14 +294,6 @@
     gap: 12px;
     color: var(--muted);
   }
-  .spinner {
-    width: 24px; height: 24px;
-    border: 2px solid var(--border);
-    border-top-color: var(--accent);
-    border-radius: 50%;
-    animation: spin .7s linear infinite;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
   .state-text { font-size: 12px; letter-spacing: .5px; }
 
   @media(max-width:600px) {
@@ -263,7 +322,7 @@
 </div>
 
 <div class="feed" id="feed">
-  <div class="state"><div class="spinner"></div><div class="state-text">LOADING FEED…</div></div>
+  <div id="skeletons"></div>
 </div>
 
 <script>
@@ -286,38 +345,76 @@ function renderCats() {
   ).join('');
 }
 
+const CAT_ICONS = {
+  'Top Stories':'📰','Business':'📈','Technology':'💻',
+  'World':'🌐','Sports':'🏏','Markets':'💹'
+};
+
+function getCatIcon(cat){ return CAT_ICONS[cat] || '📰'; }
+
 function renderFeed(articles) {
   if(!articles.length) {
     document.getElementById('feed').innerHTML = '<div class="state"><div class="state-text">NO ARTICLES FOUND</div></div>';
     return;
   }
   const [first, ...rest] = articles;
+
+  const featThumb = first.image
+    ? `<img class="featured-thumb" src="${first.image}" alt="" onerror="this.style.display='none'">`
+    : `<div class="featured-thumb-placeholder">${getCatIcon(active)}</div>`;
+
   const featured = `
     <div class="featured" onclick="window.open('${first.link}','_blank')">
       <div class="featured-tag">✦ Featured</div>
+      ${featThumb}
       <div class="featured-title">${first.title}</div>
       ${first.desc ? `<div class="featured-desc">${first.desc}…</div>` : ''}
-      <div class="featured-meta">${timeSince(first.ts)}</div>
+      <div class="art-byline">The Hindu · <span>${timeSince(first.ts)}</span></div>
     </div>`;
 
-  const list = rest.map((a,i) => `
+  const list = rest.map((a,i) => {
+    const thumb = a.image
+      ? `<img class="art-thumb" src="${a.image}" alt="" onerror="this.outerHTML='<div class=\"art-thumb-placeholder\">${getCatIcon(active)}</div>'">`
+      : `<div class="art-thumb-placeholder">${getCatIcon(active)}</div>`;
+    return `
     <a class="article" href="${a.link}" target="_blank">
       <div>
-        <div class="art-num">${String(i+2).padStart(2,'0')}</div>
         <div class="art-title">${a.title}</div>
         ${a.desc ? `<div class="art-desc">${a.desc}…</div>` : ''}
-        <div class="art-meta">${timeSince(a.ts)}</div>
+        <div class="art-byline">The Hindu · <span>${timeSince(a.ts)}</span></div>
       </div>
-      <div class="art-arrow">→</div>
-    </a>`).join('');
+      ${thumb}
+    </a>`;
+  }).join('');
 
   document.getElementById('feed').innerHTML = featured + `<div class="articles">${list}</div>`;
+}
+
+function showSkeletons(){
+  const skels = Array.from({length:5},(_,i) => i===0
+    ? `<div class="skel-featured">
+        <div class="skeleton skel-tag"></div>
+        <div class="skeleton skel-title"></div>
+        <div class="skeleton skel-title-sm"></div>
+        <div class="skeleton skel-desc"></div>
+        <div class="skeleton skel-meta"></div>
+       </div>`
+    : `<div class="skel-article">
+        <div class="skel-article-left">
+          <div class="skeleton skel-title" style="width:${85-i*5}%"></div>
+          <div class="skeleton skel-desc"></div>
+          <div class="skeleton skel-meta"></div>
+        </div>
+        <div class="skeleton skel-thumb"></div>
+       </div>`
+  ).join('');
+  document.getElementById('feed').innerHTML = skels;
 }
 
 async function load() {
   const btn = document.getElementById('rfbtn');
   btn.disabled = true; btn.textContent = '↺ LOADING';
-  document.getElementById('feed').innerHTML = '<div class="state"><div class="spinner"></div><div class="state-text">LOADING FEED…</div></div>';
+  document.getElementById('feed').innerHTML = '<div id="skeletons"></div>';
   try {
     const r = await fetch(`${API}/news?cat=${encodeURIComponent(active)}`);
     const data = await r.json();
