@@ -138,120 +138,64 @@ import xml.etree.ElementTree as ET
 import requests as req
 from email.utils import parsedate_to_datetime
 
-NEWS_FEEDS = {
-    # Livemint — India business & finance
-    "Mint: News":      "https://www.livemint.com/rss/news",
-    "Mint: Markets":   "https://www.livemint.com/rss/markets",
-    "Mint: Companies": "https://www.livemint.com/rss/companies",
-    "Mint: Economy":   "https://www.livemint.com/rss/economy",
-    "Mint: Money":     "https://www.livemint.com/rss/money",
-    "Mint: Tech":      "https://www.livemint.com/rss/technology",
-    # The Economist — global analysis
-    "Eco: Finance":    "https://www.economist.com/finance-and-economics/rss.xml",
-    "Eco: Business":   "https://www.economist.com/business/rss.xml",
-    "Eco: World":      "https://www.economist.com/international/rss.xml",
-    "Eco: Leaders":    "https://www.economist.com/leaders/rss.xml",
-    "Eco: Asia":       "https://www.economist.com/asia/rss.xml",
-    "Eco: Science":    "https://www.economist.com/science-and-technology/rss.xml",
+NEWSAPI_KEY = "55eebbd0efdc45afbd7325aa58ac4ca3"
+NEWSAPI_URL = "https://newsapi.org/v2/everything"
+
+# Map category names to NewsAPI query params
+NEWS_CATS = {
+    "Mint: News":      {"domains": "livemint.com", "q": "India"},
+    "Mint: Markets":   {"domains": "livemint.com", "q": "markets stocks"},
+    "Mint: Companies": {"domains": "livemint.com", "q": "companies business"},
+    "Mint: Economy":   {"domains": "livemint.com", "q": "economy"},
+    "Mint: Tech":      {"domains": "livemint.com", "q": "technology"},
+    "Eco: Finance":    {"domains": "economist.com", "q": "finance economics"},
+    "Eco: Business":   {"domains": "economist.com", "q": "business"},
+    "Eco: World":      {"domains": "economist.com", "q": "world international"},
+    "Eco: Leaders":    {"domains": "economist.com", "q": "leaders policy"},
+    "Eco: Asia":       {"domains": "economist.com", "q": "asia"},
+    "Eco: Science":    {"domains": "economist.com", "q": "science technology"},
 }
 
 @app.route("/news")
 def get_news():
-    import re
-    category = request.args.get("cat", "Top Stories")
-    feed_url = NEWS_FEEDS.get(category, NEWS_FEEDS["Top Stories"])
+    from datetime import datetime, timedelta
+    category = request.args.get("cat", "Mint: News")
+    params = NEWS_CATS.get(category, NEWS_CATS["Mint: News"])
+
     try:
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "Accept": "application/rss+xml, application/xml, text/xml, */*",
-        }
-        r = req.get(feed_url, timeout=15, headers=headers)
-        # Check if response is actually XML
-        content_type = r.headers.get("Content-Type", "")
-        raw = r.content
-        # Try to parse as XML
-        try:
-            root = ET.fromstring(raw)
-        except ET.ParseError as pe:
-            return jsonify({"error": f"Feed parse error: {str(pe)}", "raw_preview": raw[:200].decode('utf-8','ignore')}), 500
-        items = root.findall(".//item")
+        r = req.get(NEWSAPI_URL, params={
+            "apiKey":   NEWSAPI_KEY,
+            "domains":  params["domains"],
+            "q":        params["q"],
+            "language": "en",
+            "sortBy":   "publishedAt",
+            "pageSize": 20,
+            "from":     (datetime.utcnow() - timedelta(days=7)).strftime("%Y-%m-%d"),
+        }, timeout=10)
+        data = r.json()
+        if data.get("status") != "ok":
+            return jsonify({"error": data.get("message", "NewsAPI error")}), 500
+
         articles = []
-        media_ns = {'media': 'http://search.yahoo.com/mrss/'}
-        for item in items[:20]:
-            title = item.findtext("title", "").strip()
-            link  = item.findtext("link", "").strip()
-            if not link:
-                link = item.findtext("guid", "").strip()
-            desc  = item.findtext("description", "").strip()
-            pub   = item.findtext("pubDate", "").strip()
-            desc = re.sub(r'<[^>]+>', '', desc).strip()[:200]
+        for a in data.get("articles", []):
+            if a.get("title") in ("[Removed]", None): continue
             try:
-                ts = int(parsedate_to_datetime(pub).timestamp()) if pub else 0
+                ts = int(datetime.strptime(a["publishedAt"], "%Y-%m-%dT%H:%M:%SZ").timestamp())
             except:
                 ts = 0
-            # Extract image from RSS
-            image = None
-            for tag in ['media:content','media:thumbnail']:
-                el = item.find(tag, media_ns)
-                if el is not None:
-                    image = el.get('url')
-                    if image: break
-            if not image:
-                enc = item.find('enclosure')
-                if enc is not None and enc.get('type','').startswith('image'):
-                    image = enc.get('url')
-            if not image:
-                raw_desc = item.findtext("description","")
-                img_m = re.search(r'<img[^>]+src=["\']([^"\']+)["\']', raw_desc)
-                if img_m: image = img_m.group(1)
-            if title:
-                articles.append({"title": title, "link": link, "desc": desc, "pub": pub, "ts": ts, "image": image})
-        articles.sort(key=lambda x: x["ts"], reverse=True)
-        return jsonify({"category": category, "articles": articles, "feeds": list(NEWS_FEEDS.keys())})
+            articles.append({
+                "title": a.get("title",""),
+                "link":  a.get("url",""),
+                "desc":  (a.get("description") or "")[:200],
+                "image": a.get("urlToImage"),
+                "ts":    ts,
+                "pub":   a.get("publishedAt",""),
+            })
+
+        return jsonify({"category": category, "articles": articles, "feeds": list(NEWS_CATS.keys())})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-
-import json, os, time as _time
-
-CACHE_FILE = "/tmp/stats_cache.json"
-
-def _load_cache():
-    try:
-        if os.path.exists(CACHE_FILE):
-            with open(CACHE_FILE) as f:
-                return json.load(f)
-    except: pass
-    return {}
-
-def _save_cache(cache):
-    try:
-        with open(CACHE_FILE, "w") as f:
-            json.dump(cache, f)
-    except: pass
-
-# NSE symbol map for equity stocks
-NSE_MAP = {
-    "TCS": "TCS", "SBI": "SBIN", "HDFC": "HDFCBANK", "ICICI": "ICICIBANK",
-    "TITAN": "TITAN", "INFOSYS": "INFY", "CIPLA": "CIPLA",
-    "ULTRATECH": "ULTRACEMCO", "RELIANCE": "RELIANCE",
-}
-NSE_INDEX_MAP = {
-    "NIFTY": "NIFTY 50", "BANKNIFTY": "NIFTY BANK", "INDIAVIX": "INDIA VIX",
-}
-NSE_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Accept": "application/json",
-    "Accept-Language": "en-US,en;q=0.9",
-    "Referer": "https://www.nseindia.com",
-}
-
-def get_nse_session():
-    s = req.Session()
-    base_headers = {**NSE_HEADERS, "Accept": "text/html,application/xhtml+xml"}
-    s.get("https://www.nseindia.com", headers=base_headers, timeout=10)
-    s.get("https://www.nseindia.com/market-data/live-equity-market", headers=base_headers, timeout=10)
-    return s
 
 @app.route("/stats/<ticker>")
 def get_stats(ticker):
