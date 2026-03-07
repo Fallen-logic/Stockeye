@@ -184,6 +184,34 @@
     color: inherit;
   }
   .article:hover .art-title { color: var(--accent); }
+  .sum-btn {
+    display: inline-flex; align-items: center; gap: 5px;
+    margin-top: 6px; padding: 3px 10px; border-radius: 20px;
+    background: rgba(255,200,0,0.1); border: 1px solid rgba(255,200,0,0.3);
+    color: #ffc800; font-size: 10px; font-family: 'Space Mono', monospace;
+    cursor: pointer; letter-spacing: 0.05em; transition: all 0.2s;
+    text-decoration: none;
+  }
+  .sum-btn:hover { background: rgba(255,200,0,0.2); border-color: #ffc800; }
+  .sum-modal {
+    display: none; position: fixed; inset: 0; z-index: 1000;
+    background: rgba(0,0,0,0.7); backdrop-filter: blur(4px);
+    align-items: center; justify-content: center;
+  }
+  .sum-modal.open { display: flex; }
+  .sum-box {
+    background: #141414; border: 1px solid #2a2a2a; border-radius: 14px;
+    padding: 28px; max-width: 560px; width: 90%; max-height: 80vh;
+    overflow-y: auto; position: relative;
+  }
+  .sum-box h3 { color: #ffc800; font-size: 13px; letter-spacing: 0.1em; margin: 0 0 14px; }
+  .sum-box .sum-content { color: #ccc; font-size: 13px; line-height: 1.7; white-space: pre-wrap; }
+  .sum-close {
+    position: absolute; top: 14px; right: 16px; cursor: pointer;
+    color: #555; font-size: 18px; line-height: 1;
+  }
+  .sum-close:hover { color: #fff; }
+  .sum-loader { color: #555; font-size: 12px; font-family: 'Space Mono', monospace; }
   .art-title {
     font-size: 15px;
     font-weight: 600;
@@ -370,6 +398,7 @@ function renderFeed(articles) {
       <div class="featured-title">${first.title}</div>
       ${first.desc ? `<div class="featured-desc">${first.desc}…</div>` : ''}
       <div class="art-byline">Livemint · <span>${timeSince(first.ts)}</span></div>
+      <button class="sum-btn" onclick="event.stopPropagation();summarize(${JSON.stringify(first.title)},${JSON.stringify(first.desc||'')},${JSON.stringify(first.link)})">✦ AI SUMMARY</button>
     </div>`;
 
   const list = rest.map((a,i) => {
@@ -377,14 +406,15 @@ function renderFeed(articles) {
       ? `<img class="art-thumb" src="${a.image}" alt="" onerror="this.outerHTML='<div class=\"art-thumb-placeholder\">${getCatIcon(active)}</div>'">`
       : `<div class="art-thumb-placeholder">${getCatIcon(active)}</div>`;
     return `
-    <a class="article" href="${a.link}" target="_blank">
+    <div class="article" onclick="window.open('${a.link}','_blank')">
       <div>
         <div class="art-title">${a.title}</div>
         ${a.desc ? `<div class="art-desc">${a.desc}…</div>` : ''}
         <div class="art-byline">Livemint · <span>${timeSince(a.ts)}</span></div>
+        <button class="sum-btn" onclick="event.stopPropagation();summarize(${JSON.stringify(a.title)},${JSON.stringify(a.desc||'')},${JSON.stringify(a.link)})">✦ AI SUMMARY</button>
       </div>
       ${thumb}
-    </a>`;
+    </div>`;
   }).join('');
 
   document.getElementById('feed').innerHTML = featured + `<div class="articles">${list}</div>`;
@@ -436,6 +466,36 @@ function pick(cat) {
 renderCats();
 load();
 setInterval(load, 10*60*1000); // refresh every 10 mins
+
+async function summarize(title, desc, link) {
+  document.getElementById('sumModal').classList.add('open');
+  document.getElementById('sumContent').innerHTML = '<span class="sum-loader">✦ Analysing article...</span>';
+  try {
+    const res = await fetch('https://stockeye.onrender.com/summarize', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({title, desc, link})
+    });
+    const data = await res.json();
+    if(data.error) throw new Error(data.error);
+    document.getElementById('sumContent').textContent = data.summary;
+  } catch(e) {
+    document.getElementById('sumContent').textContent = 'Failed to summarize: ' + e.message;
+  }
+}
+function closeSum() {
+  document.getElementById('sumModal').classList.remove('open');
+}
+document.addEventListener('keydown', e => { if(e.key==='Escape') closeSum(); });
+
 </script>
+  <!-- Summary Modal -->
+  <div class="sum-modal" id="sumModal">
+    <div class="sum-box">
+      <div class="sum-close" onclick="closeSum()">✕</div>
+      <h3>✦ AI SUMMARY</h3>
+      <div class="sum-content" id="sumContent"><span class="sum-loader">Analysing article...</span></div>
+    </div>
+  </div>
 </body>
 </html>
