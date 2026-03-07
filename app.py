@@ -138,62 +138,62 @@ import xml.etree.ElementTree as ET
 import requests as req
 from email.utils import parsedate_to_datetime
 
-NEWSAPI_KEY = "55eebbd0efdc45afbd7325aa58ac4ca3"
-NEWSAPI_URL = "https://newsapi.org/v2/everything"
-
-# Map category names to NewsAPI query params
-NEWS_CATS = {
-    "News":      {"domains": "livemint.com", "q": "India"},
-    "Markets":   {"domains": "livemint.com", "q": "markets stocks"},
-    "Companies": {"domains": "livemint.com", "q": "companies business"},
-    "Economy":   {"domains": "livemint.com", "q": "economy"},
-    "Tech":      {"domains": "livemint.com", "q": "technology"},
-    "Money":     {"domains": "livemint.com", "q": "personal finance money"},
+# Livemint RSS feeds — direct
+NEWS_FEEDS = {
+    "News":      "https://www.livemint.com/rss/news",
+    "Markets":   "https://www.livemint.com/rss/markets",
+    "Companies": "https://www.livemint.com/rss/companies",
+    "Economy":   "https://www.livemint.com/rss/economy",
+    "Tech":      "https://www.livemint.com/rss/technology",
+    "Money":     "https://www.livemint.com/rss/money",
 }
 
 @app.route("/news")
 def get_news():
-    from datetime import datetime, timedelta
-    category = request.args.get("cat", "Mint: News")
-    params = NEWS_CATS.get(category, NEWS_CATS["Mint: News"])
+    import xml.etree.ElementTree as ET
+    from email.utils import parsedate_to_datetime
+    category = request.args.get("cat", "News")
+    url = NEWS_FEEDS.get(category, NEWS_FEEDS["News"])
 
     try:
-        api_params = {
-            "apiKey":   NEWSAPI_KEY,
-            "q":        params["q"],
-            "language": "en",
-            "sortBy":   "publishedAt",
-            "pageSize": 20,
-            "from":     (datetime.utcnow() - timedelta(days=7)).strftime("%Y-%m-%d"),
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            "Accept": "application/rss+xml, application/xml, text/xml, */*",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Referer": "https://www.livemint.com/",
         }
-        if "domains" in params:
-            api_params["domains"] = params["domains"]
-        if "sources" in params:
-            api_params["sources"] = params["sources"]
-        r = req.get(NEWSAPI_URL, params=api_params, timeout=10)
-        data = r.json()
-        if data.get("status") != "ok":
-            return jsonify({"error": data.get("message", "NewsAPI error")}), 500
-
+        r = req.get(url, headers=headers, timeout=10)
+        root = ET.fromstring(r.content)
+        ns = {"media": "http://search.yahoo.com/mrss/"}
         articles = []
-        for a in data.get("articles", []):
-            if a.get("title") in ("[Removed]", None): continue
-            try:
-                ts = int(datetime.strptime(a["publishedAt"], "%Y-%m-%dT%H:%M:%SZ").timestamp())
-            except:
-                ts = 0
-            articles.append({
-                "title": a.get("title",""),
-                "link":  a.get("url",""),
-                "desc":  (a.get("description") or "")[:200],
-                "image": a.get("urlToImage"),
-                "ts":    ts,
-                "pub":   a.get("publishedAt",""),
-            })
+        for item in root.findall(".//item")[:20]:
+            title = (item.findtext("title") or "").strip()
+            link  = item.findtext("link") or ""
+            desc  = (item.findtext("description") or "")[:200].strip()
+            pub   = item.findtext("pubDate") or ""
+            # timestamp
+            try: ts = int(parsedate_to_datetime(pub).timestamp())
+            except: ts = 0
+            # image
+            image = None
+            mc = item.find("media:content", ns)
+            if mc is not None: image = mc.get("url")
+            if not image:
+                mt = item.find("media:thumbnail", ns)
+                if mt is not None: image = mt.get("url")
+            if not image:
+                enc = item.find("enclosure")
+                if enc is not None and "image" in (enc.get("type") or ""):
+                    image = enc.get("url")
+            if not image and "<img" in desc:
+                import re
+                m = re.search(r'<img[^>]+src=["']([^"']+)["']', desc)
+                if m: image = m.group(1)
+            articles.append({"title": title, "link": link, "desc": desc, "image": image, "ts": ts, "pub": pub})
 
-        return jsonify({"category": category, "articles": articles, "feeds": list(NEWS_CATS.keys())})
+        return jsonify({"category": category, "articles": articles, "feeds": list(NEWS_FEEDS.keys())})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": str(e), "url": url}), 500
 
 
 @app.route("/stats/<ticker>")
