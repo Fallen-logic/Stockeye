@@ -309,7 +309,7 @@
 <div class="masthead">
   <div class="masthead-left">
     <div class="logo">News<span>Eye</span></div>
-    <div class="source-tag" id="sourceTag">Mint</div>
+    <div class="source-tag">Livemint</div>
   </div>
   <div style="display:flex;align-items:center;gap:12px">
     <div class="updated" id="ts">—</div>
@@ -327,8 +327,8 @@
 
 <script>
 const API = "https://stockeye.onrender.com";
-const CATS = ["Mint: News","Mint: Markets","Mint: Companies","Mint: Economy","Mint: Money","Mint: Tech","Eco: Finance","Eco: Business","Eco: World","Eco: Leaders","Eco: Asia","Eco: Science"];
-let active = "Mint: News";
+const CATS = ["News","Markets","Companies","Economy","Tech","Money"];
+let active = "News";
 
 function timeSince(ts) {
   if(!ts) return '';
@@ -346,10 +346,8 @@ function renderCats() {
 }
 
 const CAT_ICONS = {
-  'Mint: News':'📰','Mint: Markets':'📈','Mint: Companies':'🏢',
-  'Mint: Economy':'🏦','Mint: Money':'💰','Mint: Tech':'💻',
-  'Eco: Finance':'💹','Eco: Business':'📊','Eco: World':'🌐',
-  'Eco: Leaders':'🎯','Eco: Asia':'🌏','Eco: Science':'🔬'
+  'News':'📰','Markets':'📈','Companies':'🏢',
+  'Economy':'🏦','Tech':'💻','Money':'💰'
 };
 
 function getCatIcon(cat){ return CAT_ICONS[cat] || '📰'; }
@@ -367,11 +365,11 @@ function renderFeed(articles) {
 
   const featured = `
     <div class="featured" onclick="window.open('${first.link}','_blank')">
-      <div class="featured-tag">✦ ${active.startsWith("Eco:") ? "The Economist" : "Livemint"}</div>
+      <div class="featured-tag">✦ Livemint</div>
       ${featThumb}
       <div class="featured-title">${first.title}</div>
       ${first.desc ? `<div class="featured-desc">${first.desc}…</div>` : ''}
-      <div class="art-byline">${active.startsWith("Eco:") ? "The Economist" : "Livemint"} · <span>${timeSince(first.ts)}</span></div>
+      <div class="art-byline">Livemint · <span>${timeSince(first.ts)}</span></div>
     </div>`;
 
   const list = rest.map((a,i) => {
@@ -383,7 +381,7 @@ function renderFeed(articles) {
       <div>
         <div class="art-title">${a.title}</div>
         ${a.desc ? `<div class="art-desc">${a.desc}…</div>` : ''}
-        <div class="art-byline">${active.startsWith("Eco:") ? "The Economist" : "Livemint"} · <span>${timeSince(a.ts)}</span></div>
+        <div class="art-byline">Livemint · <span>${timeSince(a.ts)}</span></div>
       </div>
       ${thumb}
     </a>`;
@@ -432,8 +430,6 @@ async function load() {
 function pick(cat) {
   active = cat;
   renderCats();
-  const tag = document.getElementById('sourceTag');
-  if(tag) tag.textContent = cat.startsWith('Eco:') ? 'The Economist' : 'Livemint';
   load();
 }
 
