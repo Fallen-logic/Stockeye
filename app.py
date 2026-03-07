@@ -416,21 +416,51 @@ def debug_env():
 
 @app.route("/context", methods=["POST"])
 def get_context():
-    from duckduckgo_search import DDGS
     data = request.get_json()
     query = data.get("query", "")
     if not query:
         return jsonify({"error": "No query provided"}), 400
+
+    prompt = f"""You are a knowledgeable financial and world affairs analyst.
+
+A news article has this headline: "{query}"
+
+Provide background context in this exact format:
+
+BACKGROUND
+2-3 sentences of essential background on the topic, companies, or people involved.
+
+KEY FACTORS
+- Factor 1
+- Factor 2
+- Factor 3
+
+INDIA ANGLE
+One sentence on how this connects to India or Indian markets.
+
+Be factual and concise. No fluff."""
+
     try:
-        results = []
-        with DDGS() as ddgs:
-            for r in ddgs.text(query, max_results=4):
-                results.append({
-                    "title": r.get("title", ""),
-                    "snippet": r.get("body", "")[:200],
-                    "url": r.get("href", "")
-                })
-        return jsonify({"results": results})
+        groq_key = os.environ.get("GROQ_API_KEY")
+        response = req.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {groq_key}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": "llama-3.1-8b-instant",
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 500,
+                "temperature": 0.3
+            },
+            timeout=30
+        )
+        result = response.json()
+        if "choices" not in result:
+            return jsonify({"error": result.get("error", {}).get("message", str(result))}), 500
+        context_text = result["choices"][0]["message"]["content"]
+        return jsonify({"context": context_text})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
