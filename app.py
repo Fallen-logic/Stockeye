@@ -1,6 +1,7 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 import yfinance as yf
+import os
 
 app = Flask(__name__)
 CORS(app)  # Allow all origins so your dashboard can call this API
