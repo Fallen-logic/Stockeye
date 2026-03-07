@@ -403,8 +403,8 @@ function renderFeed(articles) {
 
   const list = rest.map((a,i) => {
     const thumb = a.image
-      ? `<img class="art-thumb" src="${a.image}" alt="" onerror="this.outerHTML='<div class=\"art-thumb-placeholder\">${getCatIcon(active)}</div>'">`
-      : `<div class="art-thumb-placeholder">${getCatIcon(active)}</div>`;
+      ? `<img class="art-thumb" src="${a.image}" alt="" onerror="this.style.display='none'">`
+      : ``;
     return `
     <div class="article" onclick="window.open('${a.link}','_blank')">
       <div>
