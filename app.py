@@ -143,18 +143,12 @@ NEWSAPI_URL = "https://newsapi.org/v2/everything"
 
 # Map category names to NewsAPI query params
 NEWS_CATS = {
-    "Mint: News":      {"domains": "livemint.com", "q": "India"},
-    "Mint: Markets":   {"domains": "livemint.com", "q": "markets stocks"},
-    "Mint: Companies": {"domains": "livemint.com", "q": "companies business"},
-    "Mint: Economy":   {"domains": "livemint.com", "q": "economy"},
-    "Mint: Tech":      {"domains": "livemint.com", "q": "technology"},
-    # Economist — use sources param instead of domains (free tier compatible)
-    "Eco: Finance":    {"sources": "the-economist", "q": "finance economics"},
-    "Eco: Business":   {"sources": "the-economist", "q": "business"},
-    "Eco: World":      {"sources": "the-economist", "q": "world international"},
-    "Eco: Leaders":    {"sources": "the-economist", "q": "leaders policy"},
-    "Eco: Asia":       {"sources": "the-economist", "q": "asia"},
-    "Eco: Science":    {"sources": "the-economist", "q": "science technology"},
+    "News":      {"domains": "livemint.com", "q": "India"},
+    "Markets":   {"domains": "livemint.com", "q": "markets stocks"},
+    "Companies": {"domains": "livemint.com", "q": "companies business"},
+    "Economy":   {"domains": "livemint.com", "q": "economy"},
+    "Tech":      {"domains": "livemint.com", "q": "technology"},
+    "Money":     {"domains": "livemint.com", "q": "personal finance money"},
 }
 
 @app.route("/news")
