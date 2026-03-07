@@ -352,7 +352,6 @@ def set_drawings(ticker, tf):
 
 @app.route("/summarize", methods=["POST"])
 def summarize():
-    import anthropic
     data = request.get_json()
     title = data.get("title", "")
     desc  = data.get("desc", "")
@@ -385,13 +384,23 @@ Provide:
 Be concise and direct. No fluff."""
 
     try:
-        client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
-        message = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=1000,
-            messages=[{"role": "user", "content": prompt}]
+        groq_key = os.environ.get("GROQ_API_KEY")
+        response = req.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {groq_key}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": "llama-3.1-8b-instant",
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 1000,
+                "temperature": 0.5
+            },
+            timeout=30
         )
-        summary = message.content[0].text
+        result = response.json()
+        summary = result["choices"][0]["message"]["content"]
         return jsonify({"summary": summary})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
