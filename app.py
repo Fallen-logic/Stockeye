@@ -148,12 +148,13 @@ NEWS_CATS = {
     "Mint: Companies": {"domains": "livemint.com", "q": "companies business"},
     "Mint: Economy":   {"domains": "livemint.com", "q": "economy"},
     "Mint: Tech":      {"domains": "livemint.com", "q": "technology"},
-    "Eco: Finance":    {"domains": "economist.com", "q": "finance economics"},
-    "Eco: Business":   {"domains": "economist.com", "q": "business"},
-    "Eco: World":      {"domains": "economist.com", "q": "world international"},
-    "Eco: Leaders":    {"domains": "economist.com", "q": "leaders policy"},
-    "Eco: Asia":       {"domains": "economist.com", "q": "asia"},
-    "Eco: Science":    {"domains": "economist.com", "q": "science technology"},
+    # Economist — use sources param instead of domains (free tier compatible)
+    "Eco: Finance":    {"sources": "the-economist", "q": "finance economics"},
+    "Eco: Business":   {"sources": "the-economist", "q": "business"},
+    "Eco: World":      {"sources": "the-economist", "q": "world international"},
+    "Eco: Leaders":    {"sources": "the-economist", "q": "leaders policy"},
+    "Eco: Asia":       {"sources": "the-economist", "q": "asia"},
+    "Eco: Science":    {"sources": "the-economist", "q": "science technology"},
 }
 
 @app.route("/news")
@@ -163,15 +164,19 @@ def get_news():
     params = NEWS_CATS.get(category, NEWS_CATS["Mint: News"])
 
     try:
-        r = req.get(NEWSAPI_URL, params={
+        api_params = {
             "apiKey":   NEWSAPI_KEY,
-            "domains":  params["domains"],
             "q":        params["q"],
             "language": "en",
             "sortBy":   "publishedAt",
             "pageSize": 20,
             "from":     (datetime.utcnow() - timedelta(days=7)).strftime("%Y-%m-%d"),
-        }, timeout=10)
+        }
+        if "domains" in params:
+            api_params["domains"] = params["domains"]
+        if "sources" in params:
+            api_params["sources"] = params["sources"]
+        r = req.get(NEWSAPI_URL, params=api_params, timeout=10)
         data = r.json()
         if data.get("status") != "ok":
             return jsonify({"error": data.get("message", "NewsAPI error")}), 500
