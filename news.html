@@ -386,43 +386,47 @@ const CAT_ICONS = {
 
 function getCatIcon(cat){ return CAT_ICONS[cat] || '📰'; }
 
+// Global article store — avoids JSON.stringify inside onclick attributes
+window._articles = [];
+
 function renderFeed(articles) {
   if(!articles.length) {
     document.getElementById('feed').innerHTML = '<div class="state"><div class="state-text">NO ARTICLES FOUND</div></div>';
     return;
   }
-  const [first, ...rest] = articles;
+  window._articles = articles;
 
+  const first = articles[0];
   const featThumb = first.image
     ? `<img class="featured-thumb" src="${first.image}" alt="" onerror="this.style.display='none'">`
     : `<div class="featured-thumb-placeholder">${getCatIcon(active)}</div>`;
 
   const featured = `
-    <div class="featured" onclick="window.open('${first.link}','_blank')">
+    <div class="featured" onclick="window.open(window._articles[0].link,'_blank')">
       <div class="featured-tag">✦ Livemint</div>
       ${featThumb}
       <div class="featured-title">${first.title}</div>
       ${first.desc ? `<div class="featured-desc">${first.desc}…</div>` : ''}
-      <div class="art-byline">Livemint · <span>${timeSince(first.ts)}</span></div>
-      <button class="sum-btn" onclick="event.stopPropagation();summarize(${JSON.stringify(first.title)},${JSON.stringify(first.desc||'')},${JSON.stringify(first.link)})">✦ AI SUMMARY</button>
+      <div class="art-footer" style="margin-top:10px">
+        <span class="art-byline">Livemint &middot; ${timeSince(first.ts)}</span>
+        <button class="sum-btn" onclick="event.stopPropagation();summarizeByIndex(0)">✦ AI SUMMARY</button>
+      </div>
     </div>`;
 
-  const list = rest.map((a,i) => {
+  const list = articles.slice(1).map((a, i) => {
+    const idx = i + 1;
     const thumb = a.image
       ? `<img class="art-thumb" src="${a.image}" alt="" onerror="this.style.display='none'">`
       : ``;
-    const titleJson = JSON.stringify(a.title);
-    const descJson  = JSON.stringify(a.desc||'');
-    const linkJson  = JSON.stringify(a.link);
     return `
-    <div class="article" onclick="window.open('${a.link}','_blank')">
+    <div class="article" onclick="window.open(window._articles[${idx}].link,'_blank')">
       ${thumb}
       <div class="art-body">
         <div class="art-title">${a.title}</div>
         ${a.desc ? `<div class="art-desc">${a.desc}…</div>` : ''}
         <div class="art-footer">
           <span class="art-byline">Livemint &middot; ${timeSince(a.ts)}</span>
-          <button class="sum-btn" onclick="event.stopPropagation();summarize(${titleJson},${descJson},${linkJson})">&#10022; AI SUMMARY</button>
+          <button class="sum-btn" onclick="event.stopPropagation();summarizeByIndex(${idx})">&#10022; AI SUMMARY</button>
         </div>
       </div>
     </div>`;
@@ -478,9 +482,19 @@ renderCats();
 load();
 setInterval(load, 10*60*1000); // refresh every 10 mins
 
-async function summarize(title, desc, link) {
-  document.getElementById('sumModal').classList.add('open');
-  document.getElementById('sumContent').innerHTML = '<span class="sum-loader">✦ Analysing article...</span>';
+function summarizeByIndex(idx) {
+  const a = window._articles[idx];
+  if(!a) return;
+  openSumModal(a.title, a.desc||'', a.link);
+}
+
+async function openSumModal(title, desc, link) {
+  const modal = document.getElementById('sumModal');
+  const content = document.getElementById('sumContent');
+  const titleEl = document.getElementById('sumTitle');
+  if(titleEl) titleEl.textContent = title;
+  content.innerHTML = '<span class="sum-loader">✦ Analysing article...</span>';
+  modal.classList.add('open');
   try {
     const res = await fetch('https://stockeye.onrender.com/summarize', {
       method: 'POST',
@@ -489,9 +503,9 @@ async function summarize(title, desc, link) {
     });
     const data = await res.json();
     if(data.error) throw new Error(data.error);
-    document.getElementById('sumContent').textContent = data.summary;
+    content.textContent = data.summary;
   } catch(e) {
-    document.getElementById('sumContent').textContent = 'Failed to summarize: ' + e.message;
+    content.textContent = 'Error: ' + e.message;
   }
 }
 function closeSum() {
@@ -501,11 +515,12 @@ document.addEventListener('keydown', e => { if(e.key==='Escape') closeSum(); });
 
 </script>
   <!-- Summary Modal -->
-  <div class="sum-modal" id="sumModal">
+  <div class="sum-modal" id="sumModal" onclick="if(event.target===this)closeSum()">
     <div class="sum-box">
       <div class="sum-close" onclick="closeSum()">✕</div>
       <h3>✦ AI SUMMARY</h3>
-      <div class="sum-content" id="sumContent"><span class="sum-loader">Analysing article...</span></div>
+      <div style="font-size:12px;color:#888;margin-bottom:12px;line-height:1.4" id="sumTitle"></div>
+      <div class="sum-content" id="sumContent"></div>
     </div>
   </div>
 </body>
