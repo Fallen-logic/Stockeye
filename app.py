@@ -187,7 +187,7 @@ def get_news():
                     image = enc.get("url")
             if not image and "<img" in desc:
                 import re
-                m = re.search(r'<img[^>]+src=["']([^"']+)["']', desc)
+                m = re.search("src=[\"']([\"']*[^\"']+[\"']*)", desc)
                 if m: image = m.group(1)
             articles.append({"title": title, "link": link, "desc": desc, "image": image, "ts": ts, "pub": pub})
 
