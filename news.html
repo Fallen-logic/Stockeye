@@ -183,7 +183,13 @@
     text-decoration: none;
     color: inherit;
   }
+  .article:hover .art-title { color: var(--text); font-size: 15px; font-weight: 600; line-height: 1.4; }
   .article:hover .art-title { color: var(--accent); }
+  .art-footer {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-top: 6px; gap: 10px;
+  }
+  .art-body { flex: 1; min-width: 0; }
   .sum-btn {
     display: inline-flex; align-items: center; gap: 5px;
     margin-top: 6px; padding: 3px 10px; border-radius: 20px;
@@ -405,13 +411,18 @@ function renderFeed(articles) {
     const thumb = a.image
       ? `<img class="art-thumb" src="${a.image}" alt="" onerror="this.style.display='none'">`
       : ``;
+    const titleJson = JSON.stringify(a.title);
+    const descJson  = JSON.stringify(a.desc||'');
+    const linkJson  = JSON.stringify(a.link);
     return `
     <div class="article" onclick="window.open('${a.link}','_blank')">
-      <div>
+      <div class="art-body">
         <div class="art-title">${a.title}</div>
         ${a.desc ? `<div class="art-desc">${a.desc}…</div>` : ''}
-        <div class="art-byline">Livemint · <span>${timeSince(a.ts)}</span></div>
-        <button class="sum-btn" onclick="event.stopPropagation();summarize(${JSON.stringify(a.title)},${JSON.stringify(a.desc||'')},${JSON.stringify(a.link)})">✦ AI SUMMARY</button>
+        <div class="art-footer">
+          <span class="art-byline">Livemint &middot; ${timeSince(a.ts)}</span>
+          <button class="sum-btn" onclick="event.stopPropagation();summarize(${titleJson},${descJson},${linkJson})">&#10022; AI SUMMARY</button>
+        </div>
       </div>
       ${thumb}
     </div>`;
