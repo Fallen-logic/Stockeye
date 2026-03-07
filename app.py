@@ -139,13 +139,20 @@ import requests as req
 from email.utils import parsedate_to_datetime
 
 NEWS_FEEDS = {
-    "Top Stories": "https://www.thehindu.com/feeder/default.rss",
-    "Business":    "https://www.thehindu.com/business/feeder/default.rss",
-    "Technology":  "https://www.thehindu.com/sci-tech/technology/feeder/default.rss",
-    "World":       "https://www.thehindu.com/news/international/feeder/default.rss",
-    "Sports":      "https://www.thehindu.com/sport/feeder/default.rss",
-    "Science":     "https://www.thehindu.com/sci-tech/science/feeder/default.rss",
-    "Markets":     "https://www.thehindu.com/business/markets/feeder/default.rss",
+    # Livemint — India business & finance
+    "Mint: News":      "https://www.livemint.com/rss/news",
+    "Mint: Markets":   "https://www.livemint.com/rss/markets",
+    "Mint: Companies": "https://www.livemint.com/rss/companies",
+    "Mint: Economy":   "https://www.livemint.com/rss/economy",
+    "Mint: Money":     "https://www.livemint.com/rss/money",
+    "Mint: Tech":      "https://www.livemint.com/rss/technology",
+    # The Economist — global analysis
+    "Eco: Finance":    "https://www.economist.com/finance-and-economics/rss.xml",
+    "Eco: Business":   "https://www.economist.com/business/rss.xml",
+    "Eco: World":      "https://www.economist.com/international/rss.xml",
+    "Eco: Leaders":    "https://www.economist.com/leaders/rss.xml",
+    "Eco: Asia":       "https://www.economist.com/asia/rss.xml",
+    "Eco: Science":    "https://www.economist.com/science-and-technology/rss.xml",
 }
 
 @app.route("/news")
