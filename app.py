@@ -397,5 +397,11 @@ Be concise and direct. No fluff."""
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/debug-env")
+def debug_env():
+    key = os.environ.get("ANTHROPIC_API_KEY", "NOT SET")
+    return jsonify({"key_set": key != "NOT SET", "key_preview": key[:10] + "..." if key != "NOT SET" else "NOT SET"})
+
+
 if __name__ == "__main__":
     app.run(debug=False)
