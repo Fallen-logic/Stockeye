@@ -349,5 +349,52 @@ def set_drawings(ticker, tf):
     save_drawings(data)
     return jsonify({"ok": True})
 
+@app.route("/summarize", methods=["POST"])
+def summarize():
+    import anthropic
+    data = request.get_json()
+    title = data.get("title", "")
+    desc  = data.get("desc", "")
+    link  = data.get("link", "")
+
+    # Try to fetch article content
+    article_text = ""
+    try:
+        r = req.get(link, headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+        }, timeout=8)
+        from bs4 import BeautifulSoup
+        soup = BeautifulSoup(r.text, "html.parser")
+        for tag in soup(["script","style","nav","header","footer","aside"]):
+            tag.decompose()
+        article_text = " ".join(soup.get_text(" ", strip=True).split())[:3000]
+    except:
+        article_text = desc
+
+    prompt = f"""You are a sharp financial news analyst. Summarize this article concisely.
+
+Title: {title}
+Content: {article_text}
+
+Provide:
+1. A 2-sentence TL;DR
+2. 3-4 key bullet points
+3. One line on why it matters for Indian investors
+
+Be concise and direct. No fluff."""
+
+    try:
+        client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+        message = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=1000,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        summary = message.content[0].text
+        return jsonify({"summary": summary})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 if __name__ == "__main__":
     app.run(debug=False)
