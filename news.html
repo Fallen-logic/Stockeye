@@ -532,15 +532,14 @@ async function openSumModal(title, desc, link) {
   }
 
   // Context
-  if(ctxRes.status === 'fulfilled' && ctxRes.value.results?.length) {
-    contextEl.innerHTML = ctxRes.value.results.map(r => `
-      <a class="ctx-item" href="${r.url}" target="_blank" onclick="event.stopPropagation()">
-        <div class="ctx-title">${r.title}</div>
-        <div class="ctx-snippet">${r.snippet}</div>
-        <div class="ctx-url">${r.url}</div>
-      </a>`).join('');
+  if(ctxRes.status === 'fulfilled' && ctxRes.value.context) {
+    contextEl.style.whiteSpace = 'pre-wrap';
+    contextEl.style.color = '#ccc';
+    contextEl.style.fontSize = '13px';
+    contextEl.style.lineHeight = '1.7';
+    contextEl.textContent = ctxRes.value.context;
   } else {
-    contextEl.innerHTML = '<span class="sum-loader">No context found</span>';
+    contextEl.innerHTML = '<span class="sum-loader">No context available</span>';
   }
 }
 function closeSum() {
