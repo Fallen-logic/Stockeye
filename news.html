@@ -218,6 +218,18 @@
   }
   .sum-close:hover { color: #fff; }
   .sum-loader { color: #555; font-size: 12px; font-family: 'Space Mono', monospace; }
+  .sum-article-title { font-size: 12px; color: #888; margin-bottom: 14px; line-height: 1.4; }
+  .sum-divider { border: none; border-top: 1px solid #2a2a2a; margin: 20px 0; }
+  .sum-context { display: flex; flex-direction: column; gap: 10px; }
+  .ctx-item {
+    background: #1a1a24; border: 1px solid #2a2a2a; border-radius: 8px;
+    padding: 10px 12px; text-decoration: none; display: block;
+    transition: border-color 0.15s;
+  }
+  .ctx-item:hover { border-color: #ffc800; }
+  .ctx-title { color: #ffc800; font-size: 12px; font-weight: 600; margin-bottom: 4px; }
+  .ctx-snippet { color: #888; font-size: 11px; line-height: 1.5; }
+  .ctx-url { color: #444; font-size: 10px; margin-top: 4px; font-family: 'Space Mono', monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .art-title {
     font-size: 15px;
     font-weight: 600;
@@ -490,22 +502,45 @@ function summarizeByIndex(idx) {
 
 async function openSumModal(title, desc, link) {
   const modal = document.getElementById('sumModal');
-  const content = document.getElementById('sumContent');
+  const contentEl = document.getElementById('sumContent');
+  const contextEl = document.getElementById('sumContext');
   const titleEl = document.getElementById('sumTitle');
   if(titleEl) titleEl.textContent = title;
-  content.innerHTML = '<span class="sum-loader">✦ Analysing article...</span>';
+  contentEl.innerHTML = '<span class="sum-loader">✦ Analysing article...</span>';
+  contextEl.innerHTML = '<span class="sum-loader">🔍 Searching web...</span>';
   modal.classList.add('open');
-  try {
-    const res = await fetch('https://stockeye.onrender.com/summarize', {
+
+  // Run both in parallel
+  const [sumRes, ctxRes] = await Promise.allSettled([
+    fetch('https://stockeye.onrender.com/summarize', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({title, desc, link})
-    });
-    const data = await res.json();
-    if(data.error) throw new Error(data.error);
-    content.textContent = data.summary;
-  } catch(e) {
-    content.textContent = 'Error: ' + e.message;
+    }).then(r => r.json()),
+    fetch('https://stockeye.onrender.com/context', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({query: title})
+    }).then(r => r.json())
+  ]);
+
+  // Summary
+  if(sumRes.status === 'fulfilled' && !sumRes.value.error) {
+    contentEl.textContent = sumRes.value.summary;
+  } else {
+    contentEl.textContent = 'Error: ' + (sumRes.reason || sumRes.value?.error || 'Failed');
+  }
+
+  // Context
+  if(ctxRes.status === 'fulfilled' && ctxRes.value.results?.length) {
+    contextEl.innerHTML = ctxRes.value.results.map(r => `
+      <a class="ctx-item" href="${r.url}" target="_blank" onclick="event.stopPropagation()">
+        <div class="ctx-title">${r.title}</div>
+        <div class="ctx-snippet">${r.snippet}</div>
+        <div class="ctx-url">${r.url}</div>
+      </a>`).join('');
+  } else {
+    contextEl.innerHTML = '<span class="sum-loader">No context found</span>';
   }
 }
 function closeSum() {
@@ -519,8 +554,11 @@ document.addEventListener('keydown', e => { if(e.key==='Escape') closeSum(); });
     <div class="sum-box">
       <div class="sum-close" onclick="closeSum()">✕</div>
       <h3>✦ AI SUMMARY</h3>
-      <div style="font-size:12px;color:#888;margin-bottom:12px;line-height:1.4" id="sumTitle"></div>
+      <div class="sum-article-title" id="sumTitle"></div>
       <div class="sum-content" id="sumContent"></div>
+      <div class="sum-divider"></div>
+      <h3 style="margin-bottom:10px">🔍 WEB CONTEXT</h3>
+      <div class="sum-context" id="sumContext"><span class="sum-loader">Searching web...</span></div>
     </div>
   </div>
 </body>
