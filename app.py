@@ -400,6 +400,8 @@ Be concise and direct. No fluff."""
             timeout=30
         )
         result = response.json()
+        if "choices" not in result:
+            return jsonify({"error": result.get("error", {}).get("message", str(result))}), 500
         summary = result["choices"][0]["message"]["content"]
         return jsonify({"summary": summary})
     except Exception as e:
@@ -410,6 +412,27 @@ Be concise and direct. No fluff."""
 def debug_env():
     key = os.environ.get("ANTHROPIC_API_KEY", "NOT SET")
     return jsonify({"key_set": key != "NOT SET", "key_preview": key[:10] + "..." if key != "NOT SET" else "NOT SET"})
+
+
+@app.route("/context", methods=["POST"])
+def get_context():
+    from duckduckgo_search import DDGS
+    data = request.get_json()
+    query = data.get("query", "")
+    if not query:
+        return jsonify({"error": "No query provided"}), 400
+    try:
+        results = []
+        with DDGS() as ddgs:
+            for r in ddgs.text(query, max_results=4):
+                results.append({
+                    "title": r.get("title", ""),
+                    "snippet": r.get("body", "")[:200],
+                    "url": r.get("href", "")
+                })
+        return jsonify({"results": results})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 if __name__ == "__main__":
