@@ -1143,7 +1143,7 @@ async function openAnalyst() {
   // Fetch stats from backend
   let statsData = {};
   try {
-    statsData = await apiFetch('/stats/' + active);
+    const statsRes = await apiFetch('/stats/' + active); statsData = statsRes || {};
   } catch(e) {}
 
   const stats = {
@@ -1158,7 +1158,7 @@ async function openAnalyst() {
   };
 
   try {
-    const res = await fetch('https://stockeye.onrender.com/analyze', {
+    const res = await fetch(API_URL + '/analyze', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({
