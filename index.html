@@ -115,6 +115,59 @@
   .ks-val{font-family:'Space Mono',monospace;font-size:12px;font-weight:700;}
   .ks-sub{font-size:9px;color:var(--muted);margin-top:1px;}
   @media(max-width:700px){.key-stats{grid-template-columns:repeat(3,1fr);}.yf-btn span{display:none;}}
+
+  /* AI Analyst Modal */
+  .analyst-modal {
+    display: none; position: fixed; inset: 0; z-index: 2000;
+    background: rgba(0,0,0,0.8); backdrop-filter: blur(6px);
+    align-items: center; justify-content: center;
+  }
+  .analyst-modal.open { display: flex; }
+  .analyst-box {
+    background: #0f0f14; border: 1px solid #2a2a3a;
+    border-radius: 16px; padding: 28px 32px;
+    max-width: 620px; width: 94%; max-height: 85vh;
+    overflow-y: auto; position: relative;
+  }
+  .analyst-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 6px;
+  }
+  .analyst-title {
+    font-family: 'Space Mono', monospace; font-size: 12px;
+    color: #ffc800; letter-spacing: 0.12em;
+  }
+  .analyst-ticker {
+    font-family: 'Space Mono', monospace; font-size: 11px;
+    color: #555; letter-spacing: 0.08em;
+  }
+  .analyst-close {
+    color: #444; font-size: 20px; cursor: pointer; line-height: 1;
+  }
+  .analyst-close:hover { color: #fff; }
+  .analyst-body {
+    color: #c8c8d8; font-size: 13px; line-height: 1.8;
+    white-space: pre-wrap; margin-top: 16px;
+  }
+  .analyst-body strong, .analyst-section-head {
+    color: #ffc800; font-size: 11px; font-family: 'Space Mono', monospace;
+    letter-spacing: 0.1em; display: block; margin-top: 14px; margin-bottom: 4px;
+  }
+  .analyst-loader {
+    color: #444; font-size: 12px; font-family: 'Space Mono', monospace;
+    text-align: center; padding: 40px 0; letter-spacing: 0.08em;
+  }
+  .analyst-divider {
+    border: none; border-top: 1px solid #1e1e2a; margin: 12px 0;
+  }
+  #btn-analyst {
+    background: linear-gradient(135deg, rgba(255,200,0,0.12), rgba(255,200,0,0.04));
+    border-color: rgba(255,200,0,0.4); color: #ffc800;
+  }
+  #btn-analyst:hover {
+    background: linear-gradient(135deg, rgba(255,200,0,0.22), rgba(255,200,0,0.1));
+    border-color: #ffc800;
+  }
 </style>
 </head>
 <body>
@@ -178,6 +231,10 @@
             <button class="cb ind-btn" data-ind="rsi">RSI</button>
             <button class="cb ind-btn" data-ind="macd">MACD</button>
             <button class="cb ind-btn" data-ind="patterns">PATTERNS</button>
+          </div>
+          <div class="sep"></div>
+          <div class="ctrl-grp">
+            <button class="cb" id="btn-analyst" onclick="openAnalyst()">🤖 AI ANALYST</button>
           </div>
           <div class="sep"></div>
           <div class="ctrl-grp" id="toolGrp">
@@ -546,6 +603,7 @@ async function renderChart(){
       }
 
       if(markers.length>0 && mainSeries.setMarkers){
+        window._lastMarkers = markers;
         mainSeries.setMarkers(markers);
       }
     }
@@ -1062,6 +1120,90 @@ document.getElementById('btn-fib').addEventListener('click',()=>setTool('fib'));
 document.getElementById('btn-clear').addEventListener('click',()=>clearAll());
 
 
+
+// ── AI ANALYST ──────────────────────────────────────
+async function openAnalyst() {
+  if(!active || !chartData.length) return;
+  const modal    = document.getElementById('analystModal');
+  const body     = document.getElementById('analystBody');
+  const tickerEl = document.getElementById('analystTicker');
+  tickerEl.textContent = active + ' · ' + tf;
+  body.innerHTML = '<div class="analyst-loader">🤖 Analysing ' + active + ' chart data...</div>';
+  modal.classList.add('open');
+
+  // Collect patterns from markers
+  const patternList = [];
+  if(window._lastMarkers) {
+    window._lastMarkers.forEach(m => { if(m.text && !patternList.includes(m.text)) patternList.push(m.text); });
+  }
+
+  // Get price/change from prices object
+  const p = prices[active] || {};
+
+  // Fetch stats from backend
+  let statsData = {};
+  try {
+    statsData = await apiFetch('/stats/' + active);
+  } catch(e) {}
+
+  const stats = {
+    price:     p.price ? '₹' + p.price.toFixed(2) : '—',
+    change:    p.change !== undefined ? (p.change >= 0 ? '+' : '') + p.change.toFixed(2) + ' (' + (((p.change||0)/((p.prev||1)))*100).toFixed(2) + '%)' : '—',
+    high52:    statsData.week52_high || '—',
+    low52:     statsData.week52_low  || '—',
+    pe:        statsData.pe_ratio    || '—',
+    marketcap: statsData.market_cap  || '—',
+    volume:    statsData.volume      || '—',
+    sector:    statsData.sector      || '—',
+  };
+
+  try {
+    const res = await fetch('https://stockeye.onrender.com/analyze', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        ticker:     active,
+        tf:         tf,
+        candles:    chartData.slice(-50),
+        patterns:   patternList,
+        stats:      stats,
+        indicators: indicators
+      })
+    });
+    const data = await res.json();
+    if(data.error) { body.textContent = 'Error: ' + data.error; return; }
+
+    // Format section headers in yellow
+    body.innerHTML = data.analysis.split('\n').map(line => {
+      if(/^(TREND|SUPPORT|PATTERN|MOMENTUM|OUTLOOK|RISK)/.test(line.trim())) {
+        return '<span class="analyst-section-head">' + line.trim() + '</span>';
+      }
+      return '<span>' + line + '</span>';
+    }).join('\n');
+  } catch(e) {
+    body.textContent = 'Error: ' + e.message;
+  }
+}
+
+function closeAnalyst() {
+  document.getElementById('analystModal').classList.remove('open');
+}
+document.addEventListener('keydown', e => { if(e.key==='Escape') closeAnalyst(); });
+// ── END AI ANALYST ───────────────────────────────────
 </script>
+  <!-- AI Analyst Modal -->
+  <div class="analyst-modal" id="analystModal" onclick="if(event.target===this)closeAnalyst()">
+    <div class="analyst-box">
+      <div class="analyst-header">
+        <span class="analyst-title">🤖 AI STOCK ANALYST</span>
+        <span class="analyst-ticker" id="analystTicker"></span>
+        <span class="analyst-close" onclick="closeAnalyst()">✕</span>
+      </div>
+      <hr class="analyst-divider">
+      <div class="analyst-body" id="analystBody">
+        <div class="analyst-loader">✦ Analysing chart data...</div>
+      </div>
+    </div>
+  </div>
 </body>
 </html>
