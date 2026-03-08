@@ -465,5 +465,97 @@ Be factual and concise. No fluff."""
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/analyze", methods=["POST"])
+def analyze():
+    data = request.get_json()
+    ticker    = data.get("ticker", "")
+    tf        = data.get("tf", "1D")
+    candles   = data.get("candles", [])   # last 50 OHLCV
+    patterns  = data.get("patterns", [])  # detected pattern names
+    stats     = data.get("stats", {})     # price, change, pe, 52w high/low, etc
+    indicators = data.get("indicators", {})
+
+    # Build candle summary — last 10 for brevity
+    recent = candles[-10:] if len(candles) >= 10 else candles
+    candle_lines = []
+    for c in recent:
+        import datetime
+        try:
+            dt = datetime.datetime.utcfromtimestamp(c["time"]).strftime("%d %b")
+        except:
+            dt = str(c.get("time",""))
+        candle_lines.append(
+            f"  {dt}: O={c.get('open',0):.2f} H={c.get('high',0):.2f} L={c.get('low',0):.2f} C={c.get('close',0):.2f} V={c.get('volume',0):,.0f}"
+        )
+    candle_text = "\n".join(candle_lines)
+
+    pattern_text = ", ".join(patterns) if patterns else "None detected"
+
+    prompt = f"""You are a senior equity analyst at a top Indian brokerage. Analyze this stock chart data and give a professional technical analysis.
+
+STOCK: {ticker}
+TIMEFRAME: {tf}
+CURRENT PRICE: {stats.get('price', 'N/A')}
+CHANGE: {stats.get('change', 'N/A')}
+52W HIGH: {stats.get('high52', 'N/A')}
+52W LOW: {stats.get('low52', 'N/A')}
+P/E RATIO: {stats.get('pe', 'N/A')}
+MARKET CAP: {stats.get('marketcap', 'N/A')}
+ACTIVE INDICATORS: {', '.join([k for k,v in indicators.items() if v])}
+
+RECENT OHLCV (last 10 candles):
+{candle_text}
+
+DETECTED PATTERNS: {pattern_text}
+
+Give a structured technical analysis in this exact format:
+
+TREND
+State the current trend (bullish/bearish/sideways) with reasoning based on price action.
+
+SUPPORT & RESISTANCE
+Key support: ₹[price]
+Key resistance: ₹[price]
+Brief reasoning.
+
+PATTERN ANALYSIS
+Interpret the detected patterns and what they signal.
+
+MOMENTUM
+Comment on volume trends and momentum.
+
+OUTLOOK ({tf})
+Short paragraph on the likely near-term direction and what to watch for.
+
+RISK
+One key risk to the bullish/bearish case.
+
+Keep it sharp, data-driven, and under 300 words total. Use ₹ for prices."""
+
+    try:
+        groq_key = os.environ.get("GROQ_API_KEY")
+        response = req.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {groq_key}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": "llama-3.1-8b-instant",
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 800,
+                "temperature": 0.3
+            },
+            timeout=30
+        )
+        result = response.json()
+        if "choices" not in result:
+            return jsonify({"error": result.get("error", {}).get("message", str(result))}), 500
+        analysis = result["choices"][0]["message"]["content"]
+        return jsonify({"analysis": analysis})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 if __name__ == "__main__":
     app.run(debug=False)
