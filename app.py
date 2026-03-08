@@ -80,6 +80,11 @@ def get_all_quotes():
             }
         except:
             pass
+    # Check price alerts on every quotes refresh
+    try:
+        check_and_trigger_alerts(results)
+    except:
+        pass
     return jsonify(results)
 
 @app.route("/chart/<ticker>")
@@ -555,6 +560,128 @@ Keep it sharp, data-driven, and under 300 words total. Use ₹ for prices."""
         return jsonify({"analysis": analysis})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+# ── NOTION PRICE ALERTS ─────────────────────────────
+NOTION_TOKEN   = os.environ.get("NOTION_TOKEN")
+NOTION_DB_ID   = os.environ.get("NOTION_DB_ID", "31d9b2ec-6332-806c-b1fc-000b2dd78afa")
+NOTION_HEADERS = lambda: {
+    "Authorization": f"Bearer {NOTION_TOKEN}",
+    "Content-Type": "application/json",
+    "Notion-Version": "2022-06-28"
+}
+
+def notion_get_watching_alerts():
+    """Fetch all alerts with Status = Watching from Notion."""
+    try:
+        r = req.post(
+            f"https://api.notion.com/v1/databases/{NOTION_DB_ID}/query",
+            headers=NOTION_HEADERS(),
+            json={"filter": {"property": "Status", "select": {"equals": "Watching"}}},
+            timeout=10
+        )
+        return r.json().get("results", [])
+    except:
+        return []
+
+def notion_trigger_alert(page_id, current_price):
+    """Mark an alert as Triggered and record current price + time."""
+    import datetime
+    try:
+        req.patch(
+            f"https://api.notion.com/v1/pages/{page_id}",
+            headers=NOTION_HEADERS(),
+            json={"properties": {
+                "Status":          {"select": {"name": "Triggered"}},
+                "Current Price":   {"number": current_price},
+                "Triggered at":    {"date": {"start": datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S") + "Z"}},
+            }},
+            timeout=10
+        )
+    except:
+        pass
+
+def notion_create_alert(stock, target_price, alert_type, note=""):
+    """Create a new Watching alert in Notion."""
+    try:
+        r = req.post(
+            "https://api.notion.com/v1/pages",
+            headers=NOTION_HEADERS(),
+            json={"parent": {"database_id": NOTION_DB_ID}, "properties": {
+                "Stock":        {"title": [{"text": {"content": stock}}]},
+                "Target Price": {"number": target_price},
+                "Alert Type":   {"select": {"name": alert_type}},
+                "Status":       {"select": {"name": "Watching"}},
+                "Note":         {"rich_text": [{"text": {"content": note}}]},
+            }},
+            timeout=10
+        )
+        return r.json()
+    except Exception as e:
+        return {"error": str(e)}
+
+def check_and_trigger_alerts(current_prices):
+    """Check all watching alerts against current prices and trigger if hit."""
+    alerts = notion_get_watching_alerts()
+    triggered = []
+    for alert in alerts:
+        props = alert.get("properties", {})
+        try:
+            stock        = props["Stock"]["title"][0]["text"]["content"].upper()
+            target_price = props["Target Price"]["number"]
+            alert_type   = props["Alert Type"]["select"]["name"]  # "Above" or "Below"
+            page_id      = alert["id"]
+        except:
+            continue
+
+        price_data = current_prices.get(stock)
+        if not price_data:
+            continue
+        current_price = price_data.get("price")
+        if not current_price:
+            continue
+
+        hit = (alert_type == "Above" and current_price >= target_price) or               (alert_type == "Below" and current_price <= target_price)
+
+        if hit:
+            notion_trigger_alert(page_id, current_price)
+            triggered.append({"stock": stock, "target": target_price, "current": current_price, "type": alert_type})
+
+    return triggered
+
+@app.route("/alerts", methods=["GET"])
+def get_alerts():
+    alerts = notion_get_watching_alerts()
+    result = []
+    for a in alerts:
+        props = a.get("properties", {})
+        try:
+            result.append({
+                "id":           a["id"],
+                "stock":        props["Stock"]["title"][0]["text"]["content"],
+                "target_price": props["Target Price"]["number"],
+                "alert_type":   props["Alert Type"]["select"]["name"],
+                "status":       props["Status"]["select"]["name"],
+                "note":         props["Note"]["rich_text"][0]["text"]["content"] if props["Note"]["rich_text"] else "",
+            })
+        except:
+            continue
+    return jsonify({"alerts": result})
+
+@app.route("/alerts", methods=["POST"])
+def create_alert():
+    data        = request.get_json()
+    stock       = data.get("stock", "").upper()
+    target      = data.get("target_price")
+    alert_type  = data.get("alert_type", "Above")
+    note        = data.get("note", "")
+    if not stock or target is None:
+        return jsonify({"error": "stock and target_price required"}), 400
+    result = notion_create_alert(stock, float(target), alert_type, note)
+    if "error" in result:
+        return jsonify(result), 500
+    return jsonify({"ok": True, "id": result.get("id")})
+# ── END NOTION PRICE ALERTS ─────────────────────────
 
 
 if __name__ == "__main__":
