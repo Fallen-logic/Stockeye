@@ -32,6 +32,25 @@
     padding:10px 16px;margin:16px 20px 0;font-family:'Space Mono',monospace;font-size:11px;color:#ff4d6d;
     display:none;align-items:center;gap:8px;}
   .api-banner.show{display:flex;}
+  .warmup-banner{
+    display:none;align-items:center;gap:12px;
+    background:rgba(255,200,0,.06);border:1px solid rgba(255,200,0,.2);
+    border-radius:8px;padding:10px 16px;margin:0 24px 12px;
+    font-size:12px;color:#ffc800;font-family:'Space Mono',monospace;
+  }
+  .warmup-banner.show{display:flex;}
+  .warmup-dot{
+    width:8px;height:8px;border-radius:50%;background:#ffc800;
+    animation:pulse 1s ease-in-out infinite;flex-shrink:0;
+  }
+  .warmup-progress{
+    flex:1;height:2px;background:#252535;border-radius:2px;overflow:hidden;
+  }
+  .warmup-bar{
+    height:100%;background:#ffc800;border-radius:2px;
+    width:0%;transition:width 1s linear;
+  }
+  @keyframes pulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.4;transform:scale(.8);}}
 
   .wrap{position:relative;z-index:1;max-width:1400px;margin:0 auto;padding:28px 24px;}
 
@@ -181,7 +200,12 @@
 </div>
 
 <div class="api-banner" id="apiBanner">
-  ⚠ API server offline — update API_URL in the HTML with your Render URL
+  ⚠ API server offline — check your Render deployment
+</div>
+<div class="warmup-banner" id="warmupBanner">
+  <div class="warmup-dot"></div>
+  <span id="warmupText">Server warming up — this takes ~30 seconds on first load…</span>
+  <div class="warmup-progress"><div class="warmup-bar" id="warmupBar"></div></div>
 </div>
 
 <div class="wrap">
@@ -303,10 +327,40 @@ let prices={},active=null,tf='1D',ct='candlestick',chart=null;
 let indicators={vol:true,ma20:false,ma50:false,ma200:false,rsi:false,macd:false,patterns:false};
 let rsiChart=null,macdChart=null;
 
-async function apiFetch(path, opts={}){
-  const r=await fetch(API_URL+path, opts);
-  if(!r.ok)throw new Error('API error');
-  return r.json();
+async function apiFetch(path, opts={}, retries=3){
+  for(let attempt=0; attempt<retries; attempt++){
+    try{
+      const controller = new AbortController();
+      const timeout = setTimeout(()=>controller.abort(), 60000); // 60s timeout
+      const r = await fetch(API_URL+path, {...opts, signal:controller.signal});
+      clearTimeout(timeout);
+      if(!r.ok) throw new Error('API error '+r.status);
+      return r.json();
+    } catch(e){
+      if(attempt===retries-1) throw e;
+      await new Promise(res=>setTimeout(res, 2000)); // wait 2s between retries
+    }
+  }
+}
+
+function showWarmup(){
+  const banner = document.getElementById('warmupBanner');
+  const bar    = document.getElementById('warmupBar');
+  const text   = document.getElementById('warmupText');
+  banner.classList.add('show');
+  let pct = 0;
+  const iv = setInterval(()=>{
+    pct = Math.min(pct + (pct < 70 ? 3 : 0.5), 95);
+    bar.style.width = pct + '%';
+  }, 1000);
+  return {
+    done: ()=>{
+      clearInterval(iv);
+      bar.style.width = '100%';
+      setTimeout(()=>banner.classList.remove('show'), 800);
+    },
+    setText: (t)=>{ text.textContent = t; }
+  };
 }
 
 const fmt=n=>n!=null?'₹'+n.toLocaleString('en-IN',{maximumFractionDigits:2}):'—';
@@ -319,10 +373,14 @@ function chgStr(p){
 async function loadAll(){
   const btn=document.getElementById('rfbtn');
   btn.disabled=true;btn.textContent='↺ LOADING';
+  const warmup = showWarmup();
   try{
+    warmup.setText('Connecting to server…');
     prices=await apiFetch('/quotes');
+    warmup.done();
     document.getElementById('apiBanner').classList.remove('show');
   }catch{
+    warmup.done();
     document.getElementById('apiBanner').classList.add('show');
   }
   renderTicker();renderSidebar();
