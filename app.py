@@ -124,12 +124,20 @@ def get_chart(ticker):
                 # skip NaN rows
                 if any(v != v for v in [o, h, l, c]):
                     continue
+                v = 0
+                try:
+                    raw_v = row.get("Volume", 0) if hasattr(row, 'get') else row["Volume"]
+                    if raw_v == raw_v:  # NaN check
+                        v = int(float(raw_v))
+                except:
+                    v = 0
                 data.append({
-                    "time":  t,
-                    "open":  round(o, 2),
-                    "high":  round(h, 2),
-                    "low":   round(l, 2),
-                    "close": round(c, 2),
+                    "time":   t,
+                    "open":   round(o, 2),
+                    "high":   round(h, 2),
+                    "low":    round(l, 2),
+                    "close":  round(c, 2),
+                    "volume": v,
                 })
             except:
                 continue
