@@ -584,18 +584,35 @@ def notion_get_watching_alerts():
     except:
         return []
 
-def notion_trigger_alert(page_id, current_price):
-    """Mark an alert as Triggered and record current price + time."""
+def notion_trigger_alert(page_id, current_price, stock="", target_price=None, alert_type=""):
+    """Mark an alert as Triggered, record price+time, and @mention user via comment."""
     import datetime
+    now = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S") + "Z"
+    NOTION_USER_ID = "2ddd872b-594c-8123-b205-0002d09ca382"
     try:
+        # Update page properties
         req.patch(
             f"https://api.notion.com/v1/pages/{page_id}",
             headers=NOTION_HEADERS(),
             json={"properties": {
-                "Status":          {"select": {"name": "Triggered"}},
-                "Current Price":   {"number": current_price},
-                "Triggered at":    {"date": {"start": datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S") + "Z"}},
+                "Status":        {"select": {"name": "Triggered"}},
+                "Current Price": {"number": current_price},
+                "Triggered at":  {"date": {"start": now}},
             }},
+            timeout=10
+        )
+        # Add comment with @mention to trigger phone notification
+        arrow = "🔼" if alert_type == "Above" else "🔽"
+        req.post(
+            "https://api.notion.com/v1/comments",
+            headers=NOTION_HEADERS(),
+            json={
+                "parent": {"page_id": page_id},
+                "rich_text": [
+                    {"type": "mention", "mention": {"type": "user", "user": {"id": NOTION_USER_ID}}},
+                    {"type": "text", "text": {"content": f" 🔔 ALERT TRIGGERED! {stock} hit ₹{current_price:,.2f} {arrow} target ₹{target_price:,.2f}"}}
+                ]
+            },
             timeout=10
         )
     except:
@@ -670,7 +687,7 @@ def check_and_trigger_alerts(current_prices):
         hit = (alert_type == "Above" and current_price >= target_price) or               (alert_type == "Below" and current_price <= target_price)
 
         if hit:
-            notion_trigger_alert(page_id, current_price)
+            notion_trigger_alert(page_id, current_price, stock=stock, target_price=target_price, alert_type=alert_type)
             triggered.append({"stock": stock, "target": target_price, "current": current_price, "type": alert_type})
 
     return triggered
