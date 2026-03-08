@@ -859,17 +859,28 @@ async function renderChart(){
     chart.addLineSeries({...opts,color:'rgba(147,197,253,0.7)'}).setData(bbLower);
   } } catch(e){ console.warn('BB error',e); }
 
-  // ── VWAP (overlay on main chart) ───────────────────────────────
+  // ── VWAP (overlay on main chart, resets each trading day) ───────
   try { if(indicators.vwap && norm.length>=2 && norm[0]?.volume){
     const vwapData=[];
-    let cumPV=0, cumV=0;
+    let cumPV=0, cumV=0, lastDate='';
     for(let i=0;i<norm.length;i++){
+      const t = norm[i].time;
+      // handle both Unix timestamp (number) and date string ("2025-03-09")
+      let dateStr;
+      if(typeof t === 'number'){
+        dateStr = new Date(t * 1000).toISOString().slice(0,10);
+      } else {
+        dateStr = String(t).slice(0,10);
+      }
+      if(dateStr !== lastDate){ cumPV=0; cumV=0; lastDate=dateStr; }
       const tp=(norm[i].high+norm[i].low+norm[i].close)/3;
-      cumPV+=tp*norm[i].volume;
-      cumV+=norm[i].volume;
-      vwapData.push({time:norm[i].time, value:+(cumPV/cumV).toFixed(2)});
+      const vol=norm[i].volume||0;
+      cumPV+=tp*vol; cumV+=vol;
+      if(cumV>0) vwapData.push({time:t, value:+(cumPV/cumV).toFixed(2)});
     }
-    chart.addLineSeries({color:'#f59e0b',lineWidth:1.5,priceLineVisible:false,lastValueVisible:true,crosshairMarkerVisible:false,lineStyle:1}).setData(vwapData);
+    if(vwapData.length>0){
+      chart.addLineSeries({color:'#f59e0b',lineWidth:1.5,priceLineVisible:false,lastValueVisible:true,crosshairMarkerVisible:false,lineStyle:1}).setData(vwapData);
+    }
   } } catch(e){ console.warn('VWAP error',e); }
 
   // ── ATR (separate pane) ────────────────────────────────────────
