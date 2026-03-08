@@ -839,14 +839,6 @@ async function renderChart(){
   } else {
     macdBox.style.display='none';
   }
-}
-
-async function pick(ticker){active=ticker;renderTicker();renderSidebar();await renderChart();loadTVFundamentals(ticker);await loadAndReplayDrawings();}
-function refreshAll(){loadAll().then(()=>{if(active)renderChart();});}
-
-document.getElementById('indGrp').addEventListener('click',async e=>{
-  const b=e.target.closest('[data-ind]');if(!b)return;
-  const ind=b.dataset.ind;
 
   // ── BOLLINGER BANDS (overlay on main chart) ────────────────────
   try { if(indicators.bb && norm.length>=20){
@@ -957,6 +949,14 @@ document.getElementById('indGrp').addEventListener('click',async e=>{
     dSeries.setData(dData);
     stochChart.timeScale().setVisibleRange({from:kData[0]?.time,to:kData[kData.length-1]?.time});
   } else { stochBox.style.display='none'; } } catch(e){ console.warn('Stoch error',e); }
+}
+
+async function pick(ticker){active=ticker;renderTicker();renderSidebar();await renderChart();loadTVFundamentals(ticker);await loadAndReplayDrawings();}
+function refreshAll(){loadAll().then(()=>{if(active)renderChart();});}
+
+document.getElementById('indGrp').addEventListener('click',async e=>{
+  const b=e.target.closest('[data-ind]');if(!b)return;
+  const ind=b.dataset.ind;
 
   indicators[ind]=!indicators[ind];
   b.classList.toggle('active',indicators[ind]);
