@@ -1359,12 +1359,14 @@ async function submitAlert() {
       setTimeout(()=>{ btn.textContent='✦ SAVE TO NOTION'; btn.disabled=false; }, 1500);
       loadAlertList();
     } else {
-      btn.textContent = '✦ ERROR — TRY AGAIN';
+      btn.textContent = '✦ ERROR: ' + (data.error || 'Try again');
       btn.disabled = false;
+      setTimeout(()=>{ btn.textContent='✦ SAVE TO NOTION'; }, 3000);
     }
   } catch(e) {
-    btn.textContent = '✦ ERROR — TRY AGAIN';
+    btn.textContent = '✦ ERROR: ' + e.message;
     btn.disabled = false;
+    setTimeout(()=>{ btn.textContent='✦ SAVE TO NOTION'; }, 3000);
   }
 }
 
