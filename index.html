@@ -187,6 +187,67 @@
     background: linear-gradient(135deg, rgba(255,200,0,0.22), rgba(255,200,0,0.1));
     border-color: #ffc800;
   }
+
+  /* Alert Modal */
+  .alert-modal {
+    display: none; position: fixed; inset: 0; z-index: 2000;
+    background: rgba(0,0,0,0.8); backdrop-filter: blur(6px);
+    align-items: center; justify-content: center;
+  }
+  .alert-modal.open { display: flex; }
+  .alert-box {
+    background: #0f0f14; border: 1px solid #2a2a3a;
+    border-radius: 16px; padding: 28px 32px;
+    max-width: 460px; width: 94%; position: relative;
+  }
+  .alert-title {
+    font-family: 'Space Mono', monospace; font-size: 12px;
+    color: #ffc800; letter-spacing: 0.12em; margin-bottom: 20px;
+  }
+  .alert-close {
+    position: absolute; top: 16px; right: 18px;
+    color: #444; font-size: 20px; cursor: pointer;
+  }
+  .alert-close:hover { color: #fff; }
+  .alert-field { margin-bottom: 16px; }
+  .alert-label {
+    font-family: 'Space Mono', monospace; font-size: 10px;
+    color: #555; letter-spacing: 0.1em; margin-bottom: 6px;
+  }
+  .alert-input, .alert-select {
+    width: 100%; background: #161622; border: 1px solid #2a2a3a;
+    border-radius: 8px; padding: 10px 14px; color: #e0e0f0;
+    font-size: 13px; font-family: 'DM Sans', sans-serif;
+    outline: none; transition: border-color 0.15s;
+  }
+  .alert-input:focus, .alert-select:focus { border-color: #ffc800; }
+  .alert-submit {
+    width: 100%; padding: 12px; background: rgba(255,200,0,0.12);
+    border: 1px solid rgba(255,200,0,0.4); border-radius: 8px;
+    color: #ffc800; font-family: 'Space Mono', monospace;
+    font-size: 11px; letter-spacing: 0.1em; cursor: pointer;
+    margin-top: 4px; transition: all 0.2s;
+  }
+  .alert-submit:hover { background: rgba(255,200,0,0.22); border-color: #ffc800; }
+  .alert-list { margin-top: 20px; display: flex; flex-direction: column; gap: 8px; }
+  .alert-item {
+    background: #161622; border: 1px solid #2a2a3a; border-radius: 8px;
+    padding: 10px 14px; display: flex; align-items: center; justify-content: space-between;
+    font-size: 12px;
+  }
+  .alert-item-stock { color: #ffc800; font-weight: 700; font-family: 'Space Mono', monospace; }
+  .alert-item-detail { color: #888; font-size: 11px; margin-top: 2px; }
+  .alert-tag {
+    padding: 2px 8px; border-radius: 10px; font-size: 10px;
+    font-family: 'Space Mono', monospace; letter-spacing: 0.05em;
+  }
+  .alert-tag.above { background: rgba(0,229,160,0.1); color: #00e5a0; border: 1px solid rgba(0,229,160,0.3); }
+  .alert-tag.below { background: rgba(255,77,109,0.1); color: #ff4d6d; border: 1px solid rgba(255,77,109,0.3); }
+  .alert-empty { color: #444; font-size: 12px; font-family: 'Space Mono', monospace; text-align: center; padding: 16px 0; }
+  #btn-alert {
+    background: rgba(255,200,0,0.06); border-color: rgba(255,200,0,0.25); color: #ffc800;
+  }
+  #btn-alert:hover { background: rgba(255,200,0,0.14); border-color: #ffc800; }
 </style>
 </head>
 <body>
@@ -259,6 +320,7 @@
           <div class="sep"></div>
           <div class="ctrl-grp">
             <button class="cb" id="btn-analyst" onclick="openAnalyst()">🤖 AI ANALYST</button>
+            <button class="cb" id="btn-alert" onclick="openAlertModal()">🔔 SET ALERT</button>
           </div>
           <div class="sep"></div>
           <div class="ctrl-grp" id="toolGrp">
@@ -1248,6 +1310,87 @@ function closeAnalyst() {
 }
 document.addEventListener('keydown', e => { if(e.key==='Escape') closeAnalyst(); });
 // ── END AI ANALYST ───────────────────────────────────
+
+// ── PRICE ALERTS ─────────────────────────────────────
+async function openAlertModal() {
+  const modal = document.getElementById('alertModal');
+  // Populate stock dropdown
+  const sel = document.getElementById('alert-stock');
+  sel.innerHTML = STOCKS.map(s => `<option value="${s.t}">${s.t} — ${s.n}</option>`).join('');
+  // Pre-select active stock
+  if(active) sel.value = active;
+  // Set current price as default target
+  const p = prices[sel.value];
+  if(p) document.getElementById('alert-price').value = p.price.toFixed(2);
+  // Load existing alerts
+  loadAlertList();
+  modal.classList.add('open');
+}
+
+function closeAlertModal() {
+  document.getElementById('alertModal').classList.remove('open');
+}
+
+document.getElementById('alert-stock')?.addEventListener('change', function() {
+  const p = prices[this.value];
+  if(p) document.getElementById('alert-price').value = p.price.toFixed(2);
+});
+
+async function submitAlert() {
+  const stock  = document.getElementById('alert-stock').value;
+  const type   = document.getElementById('alert-type').value;
+  const price  = parseFloat(document.getElementById('alert-price').value);
+  const note   = document.getElementById('alert-note').value;
+  if(!stock || isNaN(price)) return;
+  const btn = document.querySelector('.alert-submit');
+  btn.textContent = '✦ SAVING...';
+  btn.disabled = true;
+  try {
+    const res = await fetch(API_URL + '/alerts', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({stock, target_price: price, alert_type: type, note})
+    });
+    const data = await res.json();
+    if(data.ok) {
+      document.getElementById('alert-price').value = '';
+      document.getElementById('alert-note').value = '';
+      btn.textContent = '✦ SAVED ✓';
+      setTimeout(()=>{ btn.textContent='✦ SAVE TO NOTION'; btn.disabled=false; }, 1500);
+      loadAlertList();
+    } else {
+      btn.textContent = '✦ ERROR — TRY AGAIN';
+      btn.disabled = false;
+    }
+  } catch(e) {
+    btn.textContent = '✦ ERROR — TRY AGAIN';
+    btn.disabled = false;
+  }
+}
+
+async function loadAlertList() {
+  const list = document.getElementById('alertList');
+  list.innerHTML = '<div class="alert-empty">Loading alerts...</div>';
+  try {
+    const data = await apiFetch('/alerts');
+    const alerts = data.alerts || [];
+    if(!alerts.length) {
+      list.innerHTML = '<div class="alert-empty">No active alerts</div>';
+      return;
+    }
+    list.innerHTML = alerts.map(a => `
+      <div class="alert-item">
+        <div>
+          <div class="alert-item-stock">${a.stock}</div>
+          <div class="alert-item-detail">₹${a.target_price?.toLocaleString('en-IN')} ${a.alert_type === 'Above' ? '🔼' : '🔽'} ${a.note ? '· ' + a.note : ''}</div>
+        </div>
+        <span class="alert-tag ${a.alert_type === 'Above' ? 'above' : 'below'}">${a.alert_type}</span>
+      </div>`).join('');
+  } catch(e) {
+    list.innerHTML = '<div class="alert-empty">Could not load alerts</div>';
+  }
+}
+// ── END PRICE ALERTS ─────────────────────────────────
 </script>
   <!-- AI Analyst Modal -->
   <div class="analyst-modal" id="analystModal" onclick="if(event.target===this)closeAnalyst()">
@@ -1261,6 +1404,34 @@ document.addEventListener('keydown', e => { if(e.key==='Escape') closeAnalyst();
       <div class="analyst-body" id="analystBody">
         <div class="analyst-loader">✦ Analysing chart data...</div>
       </div>
+    </div>
+  </div>
+  <!-- Alert Modal -->
+  <div class="alert-modal" id="alertModal" onclick="if(event.target===this)closeAlertModal()">
+    <div class="alert-box">
+      <div class="alert-close" onclick="closeAlertModal()">✕</div>
+      <div class="alert-title">🔔 SET PRICE ALERT</div>
+      <div class="alert-field">
+        <div class="alert-label">STOCK</div>
+        <select class="alert-select" id="alert-stock"></select>
+      </div>
+      <div class="alert-field">
+        <div class="alert-label">ALERT TYPE</div>
+        <select class="alert-select" id="alert-type">
+          <option value="Above">Above 🔼 — alert when price goes above target</option>
+          <option value="Below">Below 🔽 — alert when price goes below target</option>
+        </select>
+      </div>
+      <div class="alert-field">
+        <div class="alert-label">TARGET PRICE (₹)</div>
+        <input type="number" class="alert-input" id="alert-price" placeholder="e.g. 1500" step="0.01">
+      </div>
+      <div class="alert-field">
+        <div class="alert-label">NOTE (optional)</div>
+        <input type="text" class="alert-input" id="alert-note" placeholder="e.g. Buy target, Stop loss...">
+      </div>
+      <button class="alert-submit" onclick="submitAlert()">✦ SAVE TO NOTION</button>
+      <div class="alert-list" id="alertList"></div>
     </div>
   </div>
 </body>
