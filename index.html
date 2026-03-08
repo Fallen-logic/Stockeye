@@ -849,7 +849,7 @@ document.getElementById('indGrp').addEventListener('click',async e=>{
   const ind=b.dataset.ind;
 
   // ── BOLLINGER BANDS (overlay on main chart) ────────────────────
-  if(indicators.bb && norm.length>=20){
+  try { if(indicators.bb && norm.length>=20){
     const bbPeriod = 20, bbMult = 2;
     const bbUpper=[], bbMid=[], bbLower=[];
     for(let i=bbPeriod-1;i<norm.length;i++){
@@ -865,10 +865,10 @@ document.getElementById('indGrp').addEventListener('click',async e=>{
     chart.addLineSeries({...opts,color:'rgba(147,197,253,0.7)'}).setData(bbUpper);
     chart.addLineSeries({...opts,color:'rgba(147,197,253,0.4)',lineStyle:1}).setData(bbMid);
     chart.addLineSeries({...opts,color:'rgba(147,197,253,0.7)'}).setData(bbLower);
-  }
+  } } catch(e){ console.warn('BB error',e); }
 
   // ── VWAP (overlay on main chart) ───────────────────────────────
-  if(indicators.vwap && norm.length>=2 && norm[0]?.volume){
+  try { if(indicators.vwap && norm.length>=2 && norm[0]?.volume){
     const vwapData=[];
     let cumPV=0, cumV=0;
     for(let i=0;i<norm.length;i++){
@@ -878,10 +878,10 @@ document.getElementById('indGrp').addEventListener('click',async e=>{
       vwapData.push({time:norm[i].time, value:+(cumPV/cumV).toFixed(2)});
     }
     chart.addLineSeries({color:'#f59e0b',lineWidth:1.5,priceLineVisible:false,lastValueVisible:true,crosshairMarkerVisible:false,lineStyle:1}).setData(vwapData);
-  }
+  } } catch(e){ console.warn('VWAP error',e); }
 
   // ── ATR (separate pane) ────────────────────────────────────────
-  const atrBox = document.getElementById('atr-box');
+  try { const atrBox = document.getElementById('atr-box');
   if(indicators.atr && norm.length>=15){
     atrBox.style.display='block';
     atrBox.innerHTML='<div style="position:absolute;top:4px;left:8px;font-size:9px;color:var(--muted);font-family:Space Mono,monospace;z-index:2;">ATR (14)</div>';
@@ -914,10 +914,10 @@ document.getElementById('indGrp').addEventListener('click',async e=>{
     const atrSeries=atrChart.addLineSeries({color:'#f97316',lineWidth:1.5,priceLineVisible:false,lastValueVisible:true});
     atrSeries.setData(atrArr);
     atrChart.timeScale().setVisibleRange({from:atrArr[0]?.time,to:atrArr[atrArr.length-1]?.time});
-  } else { atrBox.style.display='none'; }
+  } else { atrBox.style.display='none'; } } catch(e){ console.warn('ATR error',e); }
 
   // ── STOCHASTIC (separate pane) ─────────────────────────────────
-  const stochBox = document.getElementById('stoch-box');
+  try { const stochBox = document.getElementById('stoch-box');
   if(indicators.stoch && norm.length>=17){
     stochBox.style.display='block';
     stochBox.innerHTML='<div style="position:absolute;top:4px;left:8px;font-size:9px;color:var(--muted);font-family:Space Mono,monospace;z-index:2;">STOCH (14,3)</div>';
@@ -956,7 +956,7 @@ document.getElementById('indGrp').addEventListener('click',async e=>{
     kSeries.setData(kData);
     dSeries.setData(dData);
     stochChart.timeScale().setVisibleRange({from:kData[0]?.time,to:kData[kData.length-1]?.time});
-  } else { stochBox.style.display='none'; }
+  } else { stochBox.style.display='none'; } } catch(e){ console.warn('Stoch error',e); }
 
   indicators[ind]=!indicators[ind];
   b.classList.toggle('active',indicators[ind]);
@@ -1115,20 +1115,26 @@ let savedDrawings = []; // in-memory list of drawing descriptors
 
 async function saveDrawings(){
   try{
-    await apiFetch(`/drawings/${active}/${tf}`, {
+    const ctrl = new AbortController();
+    setTimeout(()=>ctrl.abort(), 8000);
+    await fetch(API_URL + `/drawings/${active}/${tf}`, {
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body: JSON.stringify(savedDrawings)
+      body: JSON.stringify(savedDrawings),
+      signal: ctrl.signal
     });
-  }catch(e){ console.warn('Save drawings failed:', e); }
+  }catch(e){ /* silent — drawings save is best-effort */ }
 }
 
 async function loadAndReplayDrawings(){
   savedDrawings = [];
   try{
-    const data = await apiFetch(`/drawings/${active}/${tf}`);
+    const ctrl = new AbortController();
+    setTimeout(()=>ctrl.abort(), 8000);
+    const r = await fetch(API_URL + `/drawings/${active}/${tf}`, {signal: ctrl.signal});
+    const data = await r.json();
     if(Array.isArray(data)) savedDrawings = data;
-  }catch(e){ console.warn('Load drawings failed:', e); }
+  }catch(e){ /* silent — drawings load is best-effort */ }
   replayDrawings();
 }
 
