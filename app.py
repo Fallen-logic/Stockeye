@@ -604,21 +604,47 @@ def notion_trigger_alert(page_id, current_price):
 def notion_create_alert(stock, target_price, alert_type, note=""):
     """Create a new Watching alert in Notion."""
     try:
+        props = {
+            "Stock":        {"title": [{"text": {"content": stock}}]},
+            "Target Price": {"number": target_price},
+            "Alert Type":   {"select": {"name": alert_type}},
+            "Status":       {"select": {"name": "Watching"}},
+        }
+        if note:
+            props["Note"] = {"rich_text": [{"text": {"content": note}}]}
         r = req.post(
             "https://api.notion.com/v1/pages",
             headers=NOTION_HEADERS(),
-            json={"parent": {"database_id": NOTION_DB_ID}, "properties": {
-                "Stock":        {"title": [{"text": {"content": stock}}]},
-                "Target Price": {"number": target_price},
-                "Alert Type":   {"select": {"name": alert_type}},
-                "Status":       {"select": {"name": "Watching"}},
-                "Note":         {"rich_text": [{"text": {"content": note}}]},
-            }},
+            json={"parent": {"database_id": NOTION_DB_ID}, "properties": props},
             timeout=10
         )
-        return r.json()
+        result = r.json()
+        if r.status_code != 200:
+            return {"error": f"Notion API {r.status_code}: {result.get('message', str(result))}"}
+        return result
     except Exception as e:
         return {"error": str(e)}
+
+@app.route("/alerts/test")
+def test_notion():
+    """Debug: test Notion connection."""
+    try:
+        key = os.environ.get("NOTION_TOKEN", "NOT SET")
+        db  = os.environ.get("NOTION_DB_ID", "NOT SET")
+        r = req.get(
+            f"https://api.notion.com/v1/databases/{db}",
+            headers=NOTION_HEADERS(),
+            timeout=10
+        )
+        return jsonify({
+            "token_set": key != "NOT SET",
+            "token_preview": key[:12] + "..." if key != "NOT SET" else "NOT SET",
+            "db_id": db,
+            "notion_status": r.status_code,
+            "notion_response": r.json().get("title", r.json().get("message", "ok"))
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)})
 
 def check_and_trigger_alerts(current_prices):
     """Check all watching alerts against current prices and trigger if hit."""
@@ -651,22 +677,26 @@ def check_and_trigger_alerts(current_prices):
 
 @app.route("/alerts", methods=["GET"])
 def get_alerts():
-    alerts = notion_get_watching_alerts()
-    result = []
-    for a in alerts:
-        props = a.get("properties", {})
-        try:
-            result.append({
-                "id":           a["id"],
-                "stock":        props["Stock"]["title"][0]["text"]["content"],
-                "target_price": props["Target Price"]["number"],
-                "alert_type":   props["Alert Type"]["select"]["name"],
-                "status":       props["Status"]["select"]["name"],
-                "note":         props["Note"]["rich_text"][0]["text"]["content"] if props["Note"]["rich_text"] else "",
-            })
-        except:
-            continue
-    return jsonify({"alerts": result})
+    try:
+        alerts = notion_get_watching_alerts()
+        result = []
+        for a in alerts:
+            props = a.get("properties", {})
+            try:
+                note_rich = props.get("Note", {}).get("rich_text", [])
+                result.append({
+                    "id":           a["id"],
+                    "stock":        props["Stock"]["title"][0]["text"]["content"],
+                    "target_price": props["Target Price"]["number"],
+                    "alert_type":   props["Alert Type"]["select"]["name"],
+                    "status":       props["Status"]["select"]["name"],
+                    "note":         note_rich[0]["text"]["content"] if note_rich else "",
+                })
+            except Exception as e:
+                continue
+        return jsonify({"alerts": result})
+    except Exception as e:
+        return jsonify({"error": str(e), "alerts": []}), 500
 
 @app.route("/alerts", methods=["POST"])
 def create_alert():
