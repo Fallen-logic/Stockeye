@@ -316,6 +316,10 @@
             <button class="cb ind-btn" data-ind="rsi">RSI</button>
             <button class="cb ind-btn" data-ind="macd">MACD</button>
             <button class="cb ind-btn" data-ind="patterns">PATTERNS</button>
+            <button class="cb ind-btn" data-ind="bb">BB</button>
+            <button class="cb ind-btn" data-ind="vwap">VWAP</button>
+            <button class="cb ind-btn" data-ind="atr">ATR</button>
+            <button class="cb ind-btn" data-ind="stoch">STOCH</button>
           </div>
           <div class="sep"></div>
           <div class="ctrl-grp">
@@ -347,6 +351,12 @@
         </div>
         <div id="macd-box" style="display:none;height:120px;border-top:1px solid var(--border);position:relative;">
           <div style="position:absolute;top:4px;left:8px;font-size:9px;color:var(--muted);font-family:'Space Mono',monospace;z-index:2;">MACD (12,26,9)</div>
+        </div>
+        <div id="atr-box" style="display:none;height:100px;border-top:1px solid var(--border);position:relative;">
+          <div style="position:absolute;top:4px;left:8px;font-size:9px;color:var(--muted);font-family:'Space Mono',monospace;z-index:2;">ATR (14)</div>
+        </div>
+        <div id="stoch-box" style="display:none;height:100px;border-top:1px solid var(--border);position:relative;">
+          <div style="position:absolute;top:4px;left:8px;font-size:9px;color:var(--muted);font-family:'Space Mono',monospace;z-index:2;">STOCH (14,3)</div>
         </div>
         <div class="stats-row">
           <div class="stat"><div class="stat-label">OPEN</div><div class="stat-val" id="s-open">—</div></div>
@@ -386,7 +396,7 @@ const STOCKS=[
 ];
 
 let prices={},active=null,tf='1D',ct='candlestick',chart=null;
-let indicators={vol:true,ma20:false,ma50:false,ma200:false,rsi:false,macd:false,patterns:false};
+let indicators={vol:true,ma20:false,ma50:false,ma200:false,rsi:false,macd:false,patterns:false,bb:false,vwap:false,atr:false,stoch:false};
 let rsiChart=null,macdChart=null;
 
 async function apiFetch(path, opts={}, retries=3){
@@ -837,6 +847,117 @@ function refreshAll(){loadAll().then(()=>{if(active)renderChart();});}
 document.getElementById('indGrp').addEventListener('click',async e=>{
   const b=e.target.closest('[data-ind]');if(!b)return;
   const ind=b.dataset.ind;
+
+  // ── BOLLINGER BANDS (overlay on main chart) ────────────────────
+  if(indicators.bb && norm.length>=20){
+    const bbPeriod = 20, bbMult = 2;
+    const bbUpper=[], bbMid=[], bbLower=[];
+    for(let i=bbPeriod-1;i<norm.length;i++){
+      const slice = norm.slice(i-bbPeriod+1,i+1).map(d=>d.close);
+      const mean  = slice.reduce((a,b)=>a+b,0)/bbPeriod;
+      const std   = Math.sqrt(slice.reduce((a,b)=>a+(b-mean)**2,0)/bbPeriod);
+      const t = norm[i].time;
+      bbUpper.push({time:t, value:+(mean+bbMult*std).toFixed(2)});
+      bbMid.push({time:t,   value:+mean.toFixed(2)});
+      bbLower.push({time:t, value:+(mean-bbMult*std).toFixed(2)});
+    }
+    const opts = {lineWidth:1,priceLineVisible:false,lastValueVisible:false,crosshairMarkerVisible:false};
+    chart.addLineSeries({...opts,color:'rgba(147,197,253,0.7)'}).setData(bbUpper);
+    chart.addLineSeries({...opts,color:'rgba(147,197,253,0.4)',lineStyle:1}).setData(bbMid);
+    chart.addLineSeries({...opts,color:'rgba(147,197,253,0.7)'}).setData(bbLower);
+  }
+
+  // ── VWAP (overlay on main chart) ───────────────────────────────
+  if(indicators.vwap && norm.length>=2 && norm[0]?.volume){
+    const vwapData=[];
+    let cumPV=0, cumV=0;
+    for(let i=0;i<norm.length;i++){
+      const tp=(norm[i].high+norm[i].low+norm[i].close)/3;
+      cumPV+=tp*norm[i].volume;
+      cumV+=norm[i].volume;
+      vwapData.push({time:norm[i].time, value:+(cumPV/cumV).toFixed(2)});
+    }
+    chart.addLineSeries({color:'#f59e0b',lineWidth:1.5,priceLineVisible:false,lastValueVisible:true,crosshairMarkerVisible:false,lineStyle:1}).setData(vwapData);
+  }
+
+  // ── ATR (separate pane) ────────────────────────────────────────
+  const atrBox = document.getElementById('atr-box');
+  if(indicators.atr && norm.length>=15){
+    atrBox.style.display='block';
+    atrBox.innerHTML='<div style="position:absolute;top:4px;left:8px;font-size:9px;color:var(--muted);font-family:Space Mono,monospace;z-index:2;">ATR (14)</div>';
+    const atrDiv=document.createElement('div');
+    atrDiv.style.cssText='height:100%;width:100%;';
+    atrBox.appendChild(atrDiv);
+    const atrChart=LightweightCharts.createChart(atrDiv,{
+      layout:{background:{color:'transparent'},textColor:'#888'},
+      grid:{vertLines:{color:'rgba(255,255,255,0.03)'},horzLines:{color:'rgba(255,255,255,0.03)'}},
+      timeScale:{visible:false}, rightPriceScale:{borderColor:'#2a2a3a',scaleMargins:{top:0.1,bottom:0.1}},
+      crosshair:{mode:1}, handleScroll:false, handleScale:false,
+    });
+    // Calculate ATR(14)
+    const atrPeriod=14;
+    const trArr=[];
+    for(let i=1;i<norm.length;i++){
+      const tr=Math.max(
+        norm[i].high-norm[i].low,
+        Math.abs(norm[i].high-norm[i-1].close),
+        Math.abs(norm[i].low-norm[i-1].close)
+      );
+      trArr.push({time:norm[i].time,tr});
+    }
+    const atrArr=[];
+    let atrVal=trArr.slice(0,atrPeriod).reduce((a,b)=>a+b.tr,0)/atrPeriod;
+    for(let i=atrPeriod;i<trArr.length;i++){
+      atrVal=(atrVal*(atrPeriod-1)+trArr[i].tr)/atrPeriod;
+      atrArr.push({time:trArr[i].time,value:+atrVal.toFixed(2)});
+    }
+    const atrSeries=atrChart.addLineSeries({color:'#f97316',lineWidth:1.5,priceLineVisible:false,lastValueVisible:true});
+    atrSeries.setData(atrArr);
+    atrChart.timeScale().setVisibleRange({from:atrArr[0]?.time,to:atrArr[atrArr.length-1]?.time});
+  } else { atrBox.style.display='none'; }
+
+  // ── STOCHASTIC (separate pane) ─────────────────────────────────
+  const stochBox = document.getElementById('stoch-box');
+  if(indicators.stoch && norm.length>=17){
+    stochBox.style.display='block';
+    stochBox.innerHTML='<div style="position:absolute;top:4px;left:8px;font-size:9px;color:var(--muted);font-family:Space Mono,monospace;z-index:2;">STOCH (14,3)</div>';
+    const stochDiv=document.createElement('div');
+    stochDiv.style.cssText='height:100%;width:100%;';
+    stochBox.appendChild(stochDiv);
+    const stochChart=LightweightCharts.createChart(stochDiv,{
+      layout:{background:{color:'transparent'},textColor:'#888'},
+      grid:{vertLines:{color:'rgba(255,255,255,0.03)'},horzLines:{color:'rgba(255,255,255,0.03)'}},
+      timeScale:{visible:false}, rightPriceScale:{borderColor:'#2a2a3a',scaleMargins:{top:0.05,bottom:0.05}},
+      crosshair:{mode:1}, handleScroll:false, handleScale:false,
+    });
+    // %K and %D
+    const kPeriod=14, dPeriod=3;
+    const kArr=[];
+    for(let i=kPeriod-1;i<norm.length;i++){
+      const slice=norm.slice(i-kPeriod+1,i+1);
+      const lo=Math.min(...slice.map(d=>d.low));
+      const hi=Math.max(...slice.map(d=>d.high));
+      const k=hi===lo?50:((norm[i].close-lo)/(hi-lo))*100;
+      kArr.push({time:norm[i].time,k});
+    }
+    const kData=kArr.map(d=>({time:d.time,value:+d.k.toFixed(2)}));
+    const dData=[];
+    for(let i=dPeriod-1;i<kArr.length;i++){
+      const avg=kArr.slice(i-dPeriod+1,i+1).reduce((a,b)=>a+b.k,0)/dPeriod;
+      dData.push({time:kArr[i].time,value:+avg.toFixed(2)});
+    }
+    // OB/OS lines
+    const obLine=stochChart.addLineSeries({color:'rgba(255,77,109,0.35)',lineWidth:1,lineStyle:2,priceLineVisible:false,lastValueVisible:false,crosshairMarkerVisible:false});
+    const osLine=stochChart.addLineSeries({color:'rgba(0,229,160,0.35)',lineWidth:1,lineStyle:2,priceLineVisible:false,lastValueVisible:false,crosshairMarkerVisible:false});
+    obLine.setData(kData.map(d=>({time:d.time,value:80})));
+    osLine.setData(kData.map(d=>({time:d.time,value:20})));
+    const kSeries=stochChart.addLineSeries({color:'#a78bfa',lineWidth:1.5,priceLineVisible:false,lastValueVisible:true});
+    const dSeries=stochChart.addLineSeries({color:'#f59e0b',lineWidth:1,priceLineVisible:false,lastValueVisible:true});
+    kSeries.setData(kData);
+    dSeries.setData(dData);
+    stochChart.timeScale().setVisibleRange({from:kData[0]?.time,to:kData[kData.length-1]?.time});
+  } else { stochBox.style.display='none'; }
+
   indicators[ind]=!indicators[ind];
   b.classList.toggle('active',indicators[ind]);
   if(active)await renderChart();
