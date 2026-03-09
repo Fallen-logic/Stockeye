@@ -778,5 +778,32 @@ def create_alert():
 # ── END NOTION PRICE ALERTS ─────────────────────────
 
 
+# ── BACKGROUND ALERT CHECKER ─────────────────────────────────────
+import threading
+
+def _alert_checker_loop():
+    """Check price alerts every 30 seconds in background."""
+    import time
+    while True:
+        try:
+            results = {}
+            for ticker, yf_sym in TICKER_MAP.items():
+                try:
+                    import yfinance as _yf
+                    hist = _yf.Ticker(yf_sym).history(period="1d")
+                    if not hist.empty:
+                        results[ticker] = {"price": round(float(hist["Close"].iloc[-1]), 2)}
+                except:
+                    pass
+            if results:
+                check_and_trigger_alerts(results)
+        except Exception as e:
+            print(f"Alert checker error: {e}")
+        time.sleep(30)
+
+_alert_thread = threading.Thread(target=_alert_checker_loop, daemon=True)
+_alert_thread.start()
+# ── END BACKGROUND ALERT CHECKER ─────────────────────────────────
+
 if __name__ == "__main__":
     app.run(debug=False)
