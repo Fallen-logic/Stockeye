@@ -573,6 +573,42 @@ Keep it sharp, data-driven, and under 300 words total. Use ₹ for prices."""
 # ── NOTION PRICE ALERTS ─────────────────────────────
 NOTION_TOKEN   = os.environ.get("NOTION_TOKEN")
 NOTION_DB_ID   = os.environ.get("NOTION_DB_ID", "31d9b2ec-6332-806c-b1fc-000b2dd78afa")
+RESEND_API_KEY = os.environ.get("RESEND_API_KEY")
+ALERT_EMAIL    = "anshkatiyar4105@gmail.com"
+
+def send_alert_email(stock, current_price, target_price, alert_type):
+    """Send price alert email via Resend."""
+    try:
+        arrow  = "🔼" if alert_type == "Above" else "🔽"
+        import datetime
+        now    = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=5, minutes=30)))
+        time_str = now.strftime("%d %b %Y, %I:%M %p IST")
+        req.post(
+            "https://api.resend.com/emails",
+            headers={"Authorization": f"Bearer {RESEND_API_KEY}", "Content-Type": "application/json"},
+            json={
+                "from":    "StockEye Alerts <onboarding@resend.dev>",
+                "to":      [ALERT_EMAIL],
+                "subject": f"🔔 StockEye Alert — {stock} hit ₹{current_price:,.2f}",
+                "html":    f"""
+                <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;background:#0f0f14;color:#e0e0f0;border-radius:12px;padding:28px;border:1px solid #2a2a3a;">
+                  <div style="font-size:22px;font-weight:bold;color:#ffc800;margin-bottom:4px;">🔔 Price Alert Triggered</div>
+                  <div style="color:#666;font-size:12px;margin-bottom:24px;">{time_str}</div>
+                  <table style="width:100%;border-collapse:collapse;">
+                    <tr><td style="color:#888;padding:8px 0;border-bottom:1px solid #1a1a2a;">Stock</td><td style="color:#ffc800;font-weight:bold;text-align:right;padding:8px 0;border-bottom:1px solid #1a1a2a;">{stock}</td></tr>
+                    <tr><td style="color:#888;padding:8px 0;border-bottom:1px solid #1a1a2a;">Alert Type</td><td style="text-align:right;padding:8px 0;border-bottom:1px solid #1a1a2a;">{alert_type} {arrow}</td></tr>
+                    <tr><td style="color:#888;padding:8px 0;border-bottom:1px solid #1a1a2a;">Target Price</td><td style="text-align:right;padding:8px 0;border-bottom:1px solid #1a1a2a;">₹{target_price:,.2f}</td></tr>
+                    <tr><td style="color:#888;padding:8px 0;">Current Price</td><td style="color:{'#00e5a0' if alert_type == 'Above' else '#ff4d6d'};font-weight:bold;text-align:right;padding:8px 0;">₹{current_price:,.2f}</td></tr>
+                  </table>
+                  <div style="margin-top:24px;font-size:11px;color:#444;">Sent by StockEye • Your personal market dashboard</div>
+                </div>
+                """
+            },
+            timeout=10
+        )
+    except Exception as e:
+        print(f"Email error: {e}")
+
 NOTION_HEADERS = lambda: {
     "Authorization": f"Bearer {NOTION_TOKEN}",
     "Content-Type": "application/json",
@@ -611,6 +647,9 @@ def notion_trigger_alert(page_id, current_price, stock="", target_price=None, al
         )
         # Add comment with @mention to trigger phone notification
         arrow = "🔼" if alert_type == "Above" else "🔽"
+        # Send email notification
+        send_alert_email(stock, current_price, target_price, alert_type)
+
         req.post(
             "https://api.notion.com/v1/comments",
             headers=NOTION_HEADERS(),
