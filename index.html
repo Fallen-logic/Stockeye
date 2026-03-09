@@ -248,6 +248,31 @@
     background: rgba(255,200,0,0.06); border-color: rgba(255,200,0,0.25); color: #ffc800;
   }
   #btn-alert:hover { background: rgba(255,200,0,0.14); border-color: #ffc800; }
+
+  /* Crosshair OHLCV Legend */
+  #crosshair-legend {
+    display: none;
+    position: absolute;
+    top: 8px; left: 8px;
+    z-index: 10;
+    background: rgba(10,10,18,0.85);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px;
+    padding: 7px 12px;
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    pointer-events: none;
+    backdrop-filter: blur(4px);
+    line-height: 1.8;
+  }
+  #crosshair-legend .cl-date { color: #666; font-size: 10px; margin-bottom: 2px; }
+  #crosshair-legend .cl-row { display: flex; gap: 12px; }
+  #crosshair-legend .cl-item { display: flex; flex-direction: column; }
+  #crosshair-legend .cl-label { color: #444; font-size: 9px; letter-spacing: 0.08em; }
+  #crosshair-legend .cl-val { color: #e0e0f0; font-size: 11px; }
+  #crosshair-legend .cl-val.up { color: #00e5a0; }
+  #crosshair-legend .cl-val.dn { color: #ff4d6d; }
+  #crosshair-legend .cl-vol { color: #888; font-size: 10px; margin-top: 2px; }
 </style>
 </head>
 <body>
@@ -345,6 +370,7 @@
           <canvas id="drawing-canvas" style="position:absolute;top:0;left:0;pointer-events:none;z-index:20;"></canvas>
           <div id="text-input-container" style="display:none;position:absolute;z-index:10;"></div>
           <div id="measure-tooltip" style="display:none;position:absolute;z-index:10;background:rgba(15,15,24,0.95);border:1px solid var(--accent);border-radius:6px;padding:8px 12px;font-family:'Space Mono',monospace;font-size:11px;pointer-events:none;"></div>
+          <div id="ohlc-tooltip" style="display:none;position:absolute;top:8px;left:8px;z-index:15;background:rgba(10,10,18,0.92);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:7px 12px;pointer-events:none;font-family:'Space Mono',monospace;font-size:11px;line-height:1.8;"></div>
         </div>
         <div id="rsi-box" style="display:none;height:120px;border-top:1px solid var(--border);position:relative;">
           <div style="position:absolute;top:4px;left:8px;font-size:9px;color:var(--muted);font-family:'Space Mono',monospace;z-index:2;">RSI (14)</div>
@@ -746,6 +772,40 @@ async function renderChart(){
   chartData = norm;
   chart.timeScale().fitContent();
   new ResizeObserver(()=>{if(chart)chart.applyOptions({width:box.clientWidth});}).observe(box);
+
+  // ── OHLC CROSSHAIR TOOLTIP ───────────────────────────────────
+  const ohlcTip = document.getElementById('ohlc-tooltip');
+  chart.subscribeCrosshairMove(param => {
+    if(!param || !param.time || !param.point){
+      ohlcTip.style.display = 'none';
+      return;
+    }
+    // Find candle data for this time
+    const candle = norm.find(d => d.time === param.time);
+    if(!candle){ ohlcTip.style.display='none'; return; }
+
+    const chg  = candle.close - candle.open;
+    const chgP = (chg / candle.open * 100).toFixed(2);
+    const chgColor = chg >= 0 ? '#00e5a0' : '#ff4d6d';
+    const fmt = v => v.toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2});
+
+    // Format date/time from unix timestamp
+    const dt = new Date(candle.time * 1000);
+    const dateStr = dt.toLocaleDateString('en-IN', {day:'2-digit', month:'short', year:'numeric', timeZone:'Asia/Kolkata'});
+    const timeStr = dt.toLocaleTimeString('en-IN', {hour:'2-digit', minute:'2-digit', hour12:false, timeZone:'Asia/Kolkata'});
+
+    ohlcTip.style.display = 'block';
+    ohlcTip.innerHTML = `
+      <span style="color:#555;font-size:9px;">${dateStr} ${timeStr}</span><br>
+      <span style="color:#888;">O</span> <span style="color:#e0e0f0;">₹${fmt(candle.open)}</span>
+      <span style="color:#888;margin-left:8px;">H</span> <span style="color:#00e5a0;">₹${fmt(candle.high)}</span>
+      <span style="color:#888;margin-left:8px;">L</span> <span style="color:#ff4d6d;">₹${fmt(candle.low)}</span>
+      <span style="color:#888;margin-left:8px;">C</span> <span style="color:#e0e0f0;">₹${fmt(candle.close)}</span>
+      <span style="color:${chgColor};margin-left:8px;">${chg>=0?'+':''}${fmt(chg)} (${chg>=0?'+':''}${chgP}%)</span>
+      ${candle.volume ? `<span style="color:#888;margin-left:8px;">V</span> <span style="color:#a0a0c0;">${candle.volume.toLocaleString('en-IN')}</span>` : ''}
+    `.trim();
+  });
+  // ── END OHLC TOOLTIP ─────────────────────────────────────────
 
   // RSI
   const rsiBox = document.getElementById('rsi-box');
