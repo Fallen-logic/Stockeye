@@ -809,80 +809,93 @@ _alert_thread.start()
 NOTION_IPO_DB = "30d9b2ec-6332-80a9-abe6-000be9fda68d"
 
 def scrape_ipos():
-    """Scrape upcoming/open IPOs from Chittorgarh."""
-    import datetime
+    """Fetch upcoming/open IPOs from NSE India API."""
+    import datetime, re
     ipos = []
     try:
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        nse_headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Accept": "application/json, text/plain, */*",
+            "Referer": "https://www.nseindia.com/",
+            "Accept-Language": "en-US,en;q=0.9",
         }
-        r = req.get("https://www.chittorgarh.com/report/ipo_list_india_mainboard_sme/8/", headers=headers, timeout=15)
-        from bs4 import BeautifulSoup
-        soup = BeautifulSoup(r.text, "html.parser")
-        table = soup.find("table")
-        if not table:
-            return ipos
-        rows = table.find_all("tr")[1:]
-        for row in rows:
-            cols = row.find_all("td")
-            if len(cols) < 6:
-                continue
+        # Step 1: establish NSE session
+        s = req.Session()
+        s.get("https://www.nseindia.com/market-data/all-upcoming-issues-ipo", headers=nse_headers, timeout=10)
+
+        # Step 2: fetch IPO data
+        r = s.get("https://www.nseindia.com/api/ipo-current-allotment", headers=nse_headers, timeout=10)
+        data = r.json() if r.status_code == 200 else {}
+
+        # Also fetch upcoming
+        r2 = s.get("https://www.nseindia.com/api/ipo-current-allotment?category=upcoming", headers=nse_headers, timeout=10)
+        data2 = r2.json() if r2.status_code == 200 else {}
+
+        def parse_nse_date(s):
+            if not s:
+                return None
+            for fmt in ["%d-%b-%Y", "%d-%m-%Y", "%Y-%m-%d", "%d %b %Y"]:
+                try:
+                    return datetime.datetime.strptime(s.strip(), fmt).strftime("%Y-%m-%d")
+                except:
+                    continue
+            return None
+
+        def determine_status(open_date, close_date):
+            today = datetime.date.today()
+            if not open_date or not close_date:
+                return "🟡 Upcoming"
+            od = datetime.date.fromisoformat(open_date)
+            cd = datetime.date.fromisoformat(close_date)
+            if od <= today <= cd:
+                return "🟢 Open"
+            elif today > cd:
+                return "🔴 Closed"
+            return "🟡 Upcoming"
+
+        all_items = []
+        if isinstance(data, list):
+            all_items += data
+        elif isinstance(data, dict):
+            all_items += data.get("data", [])
+        if isinstance(data2, list):
+            all_items += data2
+        elif isinstance(data2, dict):
+            all_items += data2.get("data", [])
+
+        seen = set()
+        for item in all_items:
             try:
-                name       = cols[0].get_text(strip=True)
-                open_str   = cols[1].get_text(strip=True)
-                close_str  = cols[2].get_text(strip=True)
-                price_str  = cols[3].get_text(strip=True)
-                lot_str    = cols[4].get_text(strip=True)
-                exchange   = cols[5].get_text(strip=True) if len(cols) > 5 else ""
-
-                # Parse price band — take upper end e.g. "₹440 to ₹463" → 463
-                import re
-                prices = re.findall(r'[\d,]+', price_str.replace(',',''))
+                name = item.get("companyName") or item.get("name") or item.get("symbol", "")
+                if not name or name in seen:
+                    continue
+                seen.add(name)
+                open_date  = parse_nse_date(item.get("openDate") or item.get("ipoOpenDate") or item.get("bidOpenDate", ""))
+                close_date = parse_nse_date(item.get("closeDate") or item.get("ipoCloseDate") or item.get("bidCloseDate", ""))
+                price_str  = str(item.get("priceBand") or item.get("issuePrice") or "")
+                prices = re.findall(r"[\d,]+", price_str.replace(",", ""))
                 price = int(prices[-1]) if prices else None
-
-                # Parse lot size
-                lots = re.findall(r'[\d,]+', lot_str.replace(',',''))
+                lot_str = str(item.get("marketLot") or item.get("lotSize") or "")
+                lots = re.findall(r"[\d]+", lot_str)
                 lot = int(lots[0]) if lots else None
-
-                # Parse dates e.g. "12 Mar 2026"
-                def parse_date(s):
-                    try:
-                        return datetime.datetime.strptime(s.strip(), "%d %b %Y").strftime("%Y-%m-%d")
-                    except:
-                        try:
-                            return datetime.datetime.strptime(s.strip(), "%b %d, %Y").strftime("%Y-%m-%d")
-                        except:
-                            return None
-
-                open_date  = parse_date(open_str)
-                close_date = parse_date(close_str)
-
-                # Determine status
-                today = datetime.date.today()
-                status = "🟡 Upcoming"
-                if open_date and close_date:
-                    od = datetime.date.fromisoformat(open_date)
-                    cd = datetime.date.fromisoformat(close_date)
-                    if od <= today <= cd:
-                        status = "🟢 Open"
-                    elif today > cd:
-                        status = "🔴 Closed"
-
-                # Exchange cleanup
+                exc_raw = str(item.get("exchange") or item.get("listingAt") or "NSE + BSE")
                 exc = "NSE + BSE"
-                if "NSE" in exchange.upper() and "BSE" not in exchange.upper():
+                if "NSE" in exc_raw.upper() and "BSE" not in exc_raw.upper():
                     exc = "NSE"
-                elif "BSE" in exchange.upper() and "NSE" not in exchange.upper():
+                elif "BSE" in exc_raw.upper() and "NSE" not in exc_raw.upper():
                     exc = "BSE"
-
-                if name:
-                    ipos.append({
-                        "name": name, "open_date": open_date, "close_date": close_date,
-                        "price": price, "lot": lot, "exchange": exc, "status": status
-                    })
+                ipos.append({
+                    "name": name,
+                    "open_date": open_date,
+                    "close_date": close_date,
+                    "price": price,
+                    "lot": lot,
+                    "exchange": exc,
+                    "status": determine_status(open_date, close_date)
+                })
             except Exception as e:
                 continue
+        print(f"NSE IPO scrape: {len(ipos)} IPOs found")
     except Exception as e:
         print(f"IPO scrape error: {e}")
     return ipos
