@@ -805,5 +805,207 @@ _alert_thread = threading.Thread(target=_alert_checker_loop, daemon=True)
 _alert_thread.start()
 # ── END BACKGROUND ALERT CHECKER ─────────────────────────────────
 
+# ── IPO AUTO UPDATER ─────────────────────────────────────────────
+NOTION_IPO_DB = "30d9b2ec-6332-80a9-abe6-000be9fda68d"
+
+def scrape_ipos():
+    """Scrape upcoming/open IPOs from Chittorgarh."""
+    import datetime
+    ipos = []
+    try:
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        }
+        r = req.get("https://www.chittorgarh.com/report/ipo_list_india_mainboard_sme/8/", headers=headers, timeout=15)
+        from bs4 import BeautifulSoup
+        soup = BeautifulSoup(r.text, "html.parser")
+        table = soup.find("table")
+        if not table:
+            return ipos
+        rows = table.find_all("tr")[1:]
+        for row in rows:
+            cols = row.find_all("td")
+            if len(cols) < 6:
+                continue
+            try:
+                name       = cols[0].get_text(strip=True)
+                open_str   = cols[1].get_text(strip=True)
+                close_str  = cols[2].get_text(strip=True)
+                price_str  = cols[3].get_text(strip=True)
+                lot_str    = cols[4].get_text(strip=True)
+                exchange   = cols[5].get_text(strip=True) if len(cols) > 5 else ""
+
+                # Parse price band — take upper end e.g. "₹440 to ₹463" → 463
+                import re
+                prices = re.findall(r'[\d,]+', price_str.replace(',',''))
+                price = int(prices[-1]) if prices else None
+
+                # Parse lot size
+                lots = re.findall(r'[\d,]+', lot_str.replace(',',''))
+                lot = int(lots[0]) if lots else None
+
+                # Parse dates e.g. "12 Mar 2026"
+                def parse_date(s):
+                    try:
+                        return datetime.datetime.strptime(s.strip(), "%d %b %Y").strftime("%Y-%m-%d")
+                    except:
+                        try:
+                            return datetime.datetime.strptime(s.strip(), "%b %d, %Y").strftime("%Y-%m-%d")
+                        except:
+                            return None
+
+                open_date  = parse_date(open_str)
+                close_date = parse_date(close_str)
+
+                # Determine status
+                today = datetime.date.today()
+                status = "🟡 Upcoming"
+                if open_date and close_date:
+                    od = datetime.date.fromisoformat(open_date)
+                    cd = datetime.date.fromisoformat(close_date)
+                    if od <= today <= cd:
+                        status = "🟢 Open"
+                    elif today > cd:
+                        status = "🔴 Closed"
+
+                # Exchange cleanup
+                exc = "NSE + BSE"
+                if "NSE" in exchange.upper() and "BSE" not in exchange.upper():
+                    exc = "NSE"
+                elif "BSE" in exchange.upper() and "NSE" not in exchange.upper():
+                    exc = "BSE"
+
+                if name:
+                    ipos.append({
+                        "name": name, "open_date": open_date, "close_date": close_date,
+                        "price": price, "lot": lot, "exchange": exc, "status": status
+                    })
+            except Exception as e:
+                continue
+    except Exception as e:
+        print(f"IPO scrape error: {e}")
+    return ipos
+
+def get_existing_ipo_names():
+    """Get names of IPOs already in Notion."""
+    try:
+        r = req.post(
+            f"https://api.notion.com/v1/databases/{NOTION_IPO_DB}/query",
+            headers=NOTION_HEADERS(),
+            json={},
+            timeout=10
+        )
+        results = r.json().get("results", [])
+        return set(
+            p["properties"]["Name of IPO"]["title"][0]["text"]["content"]
+            for p in results
+            if p["properties"].get("Name of IPO", {}).get("title")
+        )
+    except:
+        return set()
+
+def update_ipo_status():
+    """Update Status of existing IPOs based on today's date."""
+    import datetime
+    try:
+        r = req.post(
+            f"https://api.notion.com/v1/databases/{NOTION_IPO_DB}/query",
+            headers=NOTION_HEADERS(),
+            json={"filter": {"or": [
+                {"property": "Status", "select": {"equals": "🟡 Upcoming"}},
+                {"property": "Status", "select": {"equals": "🟢 Open"}},
+            ]}},
+            timeout=10
+        )
+        today = datetime.date.today()
+        for page in r.json().get("results", []):
+            try:
+                props = page["properties"]
+                open_d  = props.get("Open Date", {}).get("date", {})
+                close_d = props.get("Close Date", {}).get("date", {})
+                if not open_d or not close_d:
+                    continue
+                od = datetime.date.fromisoformat(open_d["start"])
+                cd = datetime.date.fromisoformat(close_d["start"])
+                new_status = None
+                if od <= today <= cd:
+                    new_status = "🟢 Open"
+                elif today > cd:
+                    new_status = "🔴 Closed"
+                elif today < od:
+                    new_status = "🟡 Upcoming"
+                if new_status:
+                    req.patch(
+                        f"https://api.notion.com/v1/pages/{page['id']}",
+                        headers=NOTION_HEADERS(),
+                        json={"properties": {"Status": {"select": {"name": new_status}}}},
+                        timeout=10
+                    )
+            except:
+                continue
+    except Exception as e:
+        print(f"IPO status update error: {e}")
+
+def sync_ipos_to_notion():
+    """Scrape IPOs and add new ones to Notion."""
+    ipos = scrape_ipos()
+    if not ipos:
+        return {"synced": 0, "message": "No IPOs scraped"}
+    existing = get_existing_ipo_names()
+    added = 0
+    for ipo in ipos:
+        if ipo["name"] in existing:
+            continue
+        try:
+            props = {
+                "Name of IPO": {"title": [{"text": {"content": ipo["name"]}}]},
+                "Status": {"select": {"name": ipo["status"]}},
+            }
+            if ipo["price"]:
+                props["Price Per Share"] = {"number": ipo["price"]}
+            if ipo["lot"]:
+                props["Lot Size"] = {"number": ipo["lot"]}
+            if ipo["open_date"]:
+                props["Open Date"] = {"date": {"start": ipo["open_date"]}}
+            if ipo["close_date"]:
+                props["Close Date"] = {"date": {"start": ipo["close_date"]}}
+                props["Due Date"]   = {"date": {"start": ipo["close_date"]}}
+            if ipo["exchange"]:
+                props["Exchange"] = {"select": {"name": ipo["exchange"]}}
+            req.post(
+                "https://api.notion.com/v1/pages",
+                headers=NOTION_HEADERS(),
+                json={"parent": {"database_id": NOTION_IPO_DB}, "properties": props},
+                timeout=10
+            )
+            added += 1
+        except Exception as e:
+            print(f"IPO add error: {e}")
+    # Also update status of existing IPOs
+    update_ipo_status()
+    return {"synced": added, "total_scraped": len(ipos)}
+
+@app.route("/ipo/sync")
+def ipo_sync():
+    result = sync_ipos_to_notion()
+    return jsonify(result)
+
+def _ipo_sync_loop():
+    """Sync IPOs to Notion once a day."""
+    import time
+    while True:
+        try:
+            sync_ipos_to_notion()
+            print("IPO sync complete")
+        except Exception as e:
+            print(f"IPO sync loop error: {e}")
+        time.sleep(24 * 60 * 60)  # once per day
+
+_ipo_thread = threading.Thread(target=_ipo_sync_loop, daemon=True)
+_ipo_thread.start()
+# ── END IPO AUTO UPDATER ─────────────────────────────────────────
+
+
 if __name__ == "__main__":
     app.run(debug=False)
