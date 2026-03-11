@@ -1004,6 +1004,43 @@ def ipo_sync():
     result = sync_ipos_to_notion()
     return jsonify(result)
 
+@app.route("/ipo/debug")
+def ipo_debug():
+    """Debug: show raw NSE IPO API response."""
+    try:
+        nse_headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Accept": "application/json, text/plain, */*",
+            "Referer": "https://www.nseindia.com/",
+            "Accept-Language": "en-US,en;q=0.9",
+        }
+        s = req.Session()
+        s.get("https://www.nseindia.com/market-data/all-upcoming-issues-ipo", headers=nse_headers, timeout=10)
+
+        results = {}
+        urls = [
+            "https://www.nseindia.com/api/ipo-current-allotment",
+            "https://www.nseindia.com/api/ipo-current-allotment?category=upcoming",
+            "https://www.nseindia.com/api/ipo-current-allotment?category=open",
+            "https://www.nseindia.com/api/ipo",
+        ]
+        for url in urls:
+            try:
+                r = s.get(url, headers=nse_headers, timeout=10)
+                data = r.json() if r.status_code == 200 else {"error": f"status {r.status_code}"}
+                # Show first item structure if list
+                if isinstance(data, list) and len(data) > 0:
+                    results[url] = {"count": len(data), "sample": data[0]}
+                elif isinstance(data, dict):
+                    results[url] = {"keys": list(data.keys()), "sample": str(data)[:500]}
+                else:
+                    results[url] = data
+            except Exception as e:
+                results[url] = {"error": str(e)}
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({"error": str(e)})
+
 def _ipo_sync_loop():
     """Sync IPOs to Notion once a day."""
     import time
