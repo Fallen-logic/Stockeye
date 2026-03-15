@@ -273,6 +273,40 @@
   #crosshair-legend .cl-val.up { color: #00e5a0; }
   #crosshair-legend .cl-val.dn { color: #ff4d6d; }
   #crosshair-legend .cl-vol { color: #888; font-size: 10px; margin-top: 2px; }
+
+  /* ── TICKER TAPE ─────────────────────────────────── */
+  #ticker-wrap {
+    width: 100%; background: #080810;
+    border-bottom: 1px solid #1a1a2a;
+    overflow: hidden; height: 32px;
+    display: flex; align-items: center;
+  }
+  #ticker-track {
+    display: flex; align-items: center;
+    white-space: nowrap;
+    animation: ticker-scroll 40s linear infinite;
+  }
+  #ticker-wrap:hover #ticker-track { animation-play-state: paused; }
+  @keyframes ticker-scroll {
+    0%   { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+  }
+  .ticker-item {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 0 20px; font-family: 'Space Mono', monospace;
+    font-size: 11px; cursor: pointer;
+    border-right: 1px solid #1a1a2a;
+    transition: background 0.15s;
+  }
+  .ticker-item:hover { background: rgba(255,255,255,0.04); }
+  .ticker-name { color: #e0e0f0; font-weight: 700; letter-spacing: 0.05em; }
+  .ticker-price { color: #a0a0c0; }
+  .ticker-chg.up  { color: #00e5a0; }
+  .ticker-chg.dn  { color: #ff4d6d; }
+  .ticker-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+  .ticker-dot.up { background: #00e5a0; }
+  .ticker-dot.dn { background: #ff4d6d; }
+  /* ── END TICKER ──────────────────────────────────── */
 </style>
 </head>
 <body>
@@ -485,6 +519,26 @@ async function loadAll(){
   document.getElementById('ts').textContent='Updated '+new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})+' IST';
   btn.disabled=false;btn.textContent='↺ REFRESH';
   if(active)updateHeader();
+}
+
+function buildTickerTape(){
+  const track = document.getElementById('ticker-track');
+  if(!track || !Object.keys(prices).length) return;
+  const items = STOCKS.map(s => {
+    const p = prices[s.t];
+    if(!p) return '';
+    const up = p.change_pct >= 0;
+    const pct = (up ? '+' : '') + p.change_pct.toFixed(2) + '%';
+    const price = '₹' + p.price.toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2});
+    return `<div class="ticker-item" onclick="pick('${s.t}')">
+      <span class="ticker-dot ${up?'up':'dn'}"></span>
+      <span class="ticker-name">${s.t}</span>
+      <span class="ticker-price">${price}</span>
+      <span class="ticker-chg ${up?'up':'dn'}">${pct}</span>
+    </div>`;
+  }).join('');
+  // Duplicate for seamless loop
+  track.innerHTML = items + items;
 }
 
 function renderTicker(){
@@ -1023,15 +1077,20 @@ async function renderChart(){
 }
 
 async function pick(ticker){active=ticker;renderTicker();renderSidebar();await renderChart();loadTVFundamentals(ticker);await loadAndReplayDrawings();}
-function refreshAll(){loadAll().then(()=>{if(active)renderChart();});}
+function refreshAll(){loadAll().then(()=>{if(active)renderChart(); buildTickerTape();});}
 
-document.getElementById('indGrp').addEventListener('click',async e=>{
+let _renderDebounce = null;
+function debouncedRender(){ 
+  clearTimeout(_renderDebounce);
+  _renderDebounce = setTimeout(()=>{ if(active) renderChart(); }, 150);
+}
+
+document.getElementById('indGrp').addEventListener('click', e=>{
   const b=e.target.closest('[data-ind]');if(!b)return;
   const ind=b.dataset.ind;
-
   indicators[ind]=!indicators[ind];
   b.classList.toggle('active',indicators[ind]);
-  if(active)await renderChart();
+  debouncedRender();
 });
 document.getElementById('tfGrp').addEventListener('click',async e=>{
   const b=e.target.closest('[data-tf]');if(!b)return;
@@ -1048,7 +1107,7 @@ document.getElementById('ctGrp').addEventListener('click',async e=>{
   if(active)await renderChart();
 });
 
-loadAll().then(()=>pick('NIFTY'));
+loadAll().then(()=>{ pick('NIFTY'); buildTickerTape(); });
 setInterval(loadAll,5*60*1000);
 
 // ── TOOLS ────────────────────────────────────────────────────────
