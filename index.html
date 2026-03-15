@@ -278,7 +278,7 @@
   #ticker-wrap {
     width: 100%; background: #080810;
     border-bottom: 1px solid #1a1a2a;
-    overflow: hidden; height: 32px; position: relative;
+    overflow: hidden; height: 48px; position: relative;
   }
   #ticker-inner {
     display: flex; width: max-content;
@@ -288,7 +288,7 @@
   .ticker-item {
     display: inline-flex; align-items: center; gap: 6px;
     padding: 0 20px; font-family: 'Space Mono', monospace;
-    font-size: 11px; cursor: pointer; flex-shrink: 0; height: 100%;
+    font-size: 12px; cursor: pointer; flex-shrink: 0; height: 100%;
     border-right: 1px solid #1a1a2a; transition: background 0.15s;
   }
   .ticker-item:hover { background: rgba(255,255,255,0.04); }
@@ -323,10 +323,6 @@
 
 <div id="ticker-wrap" onmouseenter="tickerPaused=true" onmouseleave="tickerPaused=false"><div id="ticker-inner"></div></div>
 <div class="wrap">
-  <div class="ticker" id="tickerStrip">
-    <div style="color:var(--muted);font-size:11px;padding:8px;font-family:'Space Mono',monospace">Connecting to server…</div>
-  </div>
-
   <div class="layout">
     <div class="sidebar" id="sidebarCards"></div>
     <div>
@@ -545,118 +541,18 @@ function buildTickerTape(){
 
   function animate(){
     if(!tickerPaused){
-      _tickerX += 0.4;
-      // Reset when we've scrolled one full copy width
+      _tickerX += 0.5;
       const copyWidth = inner.scrollWidth / 3;
-      if(_tickerX >= copyWidth) _tickerX = 0;
-      inner.style.transform = `translateX(-${_tickerX}px)`;
+      if(copyWidth > 0 && _tickerX >= copyWidth) _tickerX = 0;
+      inner.style.transform = 'translateX(-' + _tickerX + 'px)';
     }
     _tickerRAF = requestAnimationFrame(animate);
   }
-  animate();
+  setTimeout(animate, 300);
 }
 
 function renderTicker(){
-  document.getElementById('tickerStrip').innerHTML=STOCKS.map(s=>{
-    const p=prices[s.t];
-    if(!p)return`<div class="ti ${active===s.t?'active':''}" onclick="pick('${s.t}')"><span class="ti-name">${s.t}</span><span class="ti-price">—</span></div>`;
-    const cls=p.change>=0?'up':'down';
-    return`<div class="ti ${active===s.t?'active':''}" onclick="pick('${s.t}')">
-      <span class="ti-name">${s.t}</span>
-      <span class="ti-price ${cls}">${fmt(p.price)}</span>
-      <span class="ti-chg ${cls}">${p.change>=0?'+':''}${p.change_pct.toFixed(2)}%</span>
-    </div>`;
-  }).join('');
-}
-
-function renderSidebar(){
-  document.getElementById('sidebarCards').innerHTML=STOCKS.map(s=>{
-    const p=prices[s.t];
-    const cls=p?(p.change>=0?'up':'down'):'';
-    const fp=p?Math.min(100,Math.abs(p.change_pct)*10):0;
-    const bc=cls==='up'?'var(--up)':'var(--down)';
-    return`<div class="card ${active===s.t?'active':''}" onclick="pick('${s.t}')">
-      <div class="card-inner">
-        <div><div class="card-sym">${s.t}</div><div class="card-name">${s.n}</div></div>
-        <div class="card-right">
-          <div class="card-price ${cls}">${p?fmt(p.price):'—'}</div>
-          <div class="card-chg ${cls}">${p?chgStr(p):''}</div>
-        </div>
-      </div>
-      <div class="card-bar"><div class="card-bar-fill" style="width:${fp}%;background:${bc}"></div></div>
-    </div>`;
-  }).join('');
-}
-
-function updateHeader(){
-  if(!active)return;
-  const s=STOCKS.find(x=>x.t===active),p=prices[active];
-  document.getElementById('ctitle').textContent=active;
-  document.getElementById('cname').textContent=s?.n||'';
-  if(p){
-    const cls=p.change>=0?'up':'down';
-    document.getElementById('cprice').className=`big-price ${cls}`;
-    document.getElementById('cprice').textContent=fmt(p.price);
-    document.getElementById('cchg').className=`big-chg ${cls}`;
-    document.getElementById('cchg').textContent=chgStr(p);
-    document.getElementById('s-open').textContent=fmt(p.open);
-    document.getElementById('s-high').textContent=fmt(p.high);
-    document.getElementById('s-low').textContent=fmt(p.low);
-    document.getElementById('s-prev').textContent=fmt(p.prev);
-  }
-}
-
-
-const TV_MAP = {
-  TCS:'NSE:TCS', SBI:'NSE:SBIN', HDFC:'NSE:HDFCBANK', ICICI:'NSE:ICICIBANK',
-  TITAN:'NSE:TITAN', INFOSYS:'NSE:INFY', CIPLA:'NSE:CIPLA',
-  ULTRATECH:'NSE:ULTRACEMCO', RELIANCE:'NSE:RELIANCE',
-  NIFTY:'NSE:NIFTY50', BANKNIFTY:'NSE:BANKNIFTY',
-  INDIAVIX:'NSE:INDIAVIX', SENSEX:'BSE:SENSEX'
-};
-
-function loadTVFundamentals(ticker) {
-  // Update Yahoo Finance link
-  const YF_MAP = {
-    TCS:'TCS.NS',SBI:'SBIN.NS',HDFC:'HDFCBANK.NS',ICICI:'ICICIBANK.NS',
-    TITAN:'TITAN.NS',INFOSYS:'INFY.NS',CIPLA:'CIPLA.NS',ULTRATECH:'ULTRACEMCO.NS',
-    RELIANCE:'RELIANCE.NS',NIFTY:'%5ENSEI',BANKNIFTY:'%5ENSEBANK',
-    INDIAVIX:'%5EINDIAVIX',SENSEX:'%5EBSESN'
-  };
-  const SC_MAP = {
-    TCS:'NSE:TCS',SBI:'NSE:SBIN',HDFC:'NSE:HDFCBANK',ICICI:'NSE:ICICIBANK',
-    TITAN:'NSE:TITAN',INFOSYS:'NSE:INFY',CIPLA:'NSE:CIPLA',ULTRATECH:'NSE:ULTRACEMCO',
-    RELIANCE:'NSE:RELIANCE',NIFTY:'NSE:NIFTY',BANKNIFTY:'NSE:BANKNIFTY',
-    INDIAVIX:'NSE:INDIAVIX',SENSEX:'BSE:SENSEX'
-  };
-  const yfLink = document.getElementById('yf-link');
-  yfLink.href = `https://finance.yahoo.com/quote/${YF_MAP[ticker]||ticker}`;
-  yfLink.style.display = 'inline-flex';
-  const scLink = document.getElementById('sc-link');
-  const INDEXES = ['NIFTY','BANKNIFTY','INDIAVIX','SENSEX'];
-  if(INDEXES.includes(ticker)){
-    scLink.href = `https://in.tradingview.com/chart/?symbol=${SC_MAP[ticker]||('NSE:'+ticker)}`;
-  } else {
-    scLink.href = `https://in.tradingview.com/symbols/${(SC_MAP[ticker]||('NSE:'+ticker)).replace(':','-')}/financials-overview/`;
-  }
-  scLink.style.display = 'inline-flex';
-  const sym = TV_MAP[ticker] || ('NSE:' + ticker);
-  const container = document.getElementById('tv-fundamentals');
-  container.innerHTML = '';
-  const script = document.createElement('script');
-  script.type = 'text/javascript';
-  script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-financials.js';
-  script.async = true;
-  script.innerHTML = JSON.stringify({
-    symbol: sym,
-    colorTheme: 'dark',
-    isTransparent: true,
-    largeChartUrl: '',
-    displayMode: 'regular',
-    width: '100%',
-    height: 220,
-    locale: 'en'
-  });
+  // tickerStrip removed
   container.appendChild(script);
 }
 
