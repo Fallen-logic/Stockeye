@@ -278,31 +278,18 @@
   #ticker-wrap {
     width: 100%; background: #080810;
     border-bottom: 1px solid #1a1a2a;
-    overflow: hidden; height: 32px;
-    display: flex; align-items: center;
-    position: relative;
+    overflow: hidden; height: 32px; position: relative;
   }
-  #ticker-wrap:hover .ticker-col { animation-play-state: paused; }
-  .ticker-col {
-    display: inline-flex; align-items: center;
-    white-space: nowrap; flex-shrink: 0;
-    animation: ticker-move 35s linear infinite;
-  }
-  .ticker-col-2 {
-    animation: ticker-move 35s linear infinite;
-    animation-delay: -17.5s;
-    position: absolute; left: 0;
-  }
-  @keyframes ticker-move {
-    0%   { transform: translateX(100vw); }
-    100% { transform: translateX(-100%); }
+  #ticker-inner {
+    display: flex; width: max-content;
+    position: absolute; top: 0; left: 0; height: 100%;
+    align-items: center;
   }
   .ticker-item {
     display: inline-flex; align-items: center; gap: 6px;
     padding: 0 20px; font-family: 'Space Mono', monospace;
-    font-size: 11px; cursor: pointer; flex-shrink: 0;
-    border-right: 1px solid #1a1a2a;
-    transition: background 0.15s;
+    font-size: 11px; cursor: pointer; flex-shrink: 0; height: 100%;
+    border-right: 1px solid #1a1a2a; transition: background 0.15s;
   }
   .ticker-item:hover { background: rgba(255,255,255,0.04); }
   .ticker-name { color: #e0e0f0; font-weight: 700; letter-spacing: 0.05em; }
@@ -527,12 +514,15 @@ async function loadAll(){
   if(active)updateHeader();
 }
 
-function buildTickerTape(){
-  const col1 = document.getElementById('ticker-col-1');
-  const col2 = document.getElementById('ticker-col-2');
-  if(!col1 || !Object.keys(prices).length) return;
+let tickerPaused = false;
+let _tickerX = 0;
+let _tickerRAF = null;
 
-  const items = STOCKS.map(s => {
+function buildTickerTape(){
+  const inner = document.getElementById('ticker-inner');
+  if(!inner || !Object.keys(prices).length) return;
+
+  const html = STOCKS.map(s => {
     const p = prices[s.t];
     if(!p) return '';
     const up = p.change_pct >= 0;
@@ -546,11 +536,24 @@ function buildTickerTape(){
     </div>`;
   }).join('');
 
-  col1.innerHTML = items;
-  col2.innerHTML = items;
+  // Duplicate enough times to always fill the screen
+  inner.innerHTML = html + html + html;
+
+  if(_tickerRAF) cancelAnimationFrame(_tickerRAF);
+  _tickerX = 0;
+
+  function animate(){
+    if(!tickerPaused){
+      _tickerX += 0.4;
+      // Reset when we've scrolled one full copy width
+      const copyWidth = inner.scrollWidth / 3;
+      if(_tickerX >= copyWidth) _tickerX = 0;
+      inner.style.transform = `translateX(-${_tickerX}px)`;
+    }
+    _tickerRAF = requestAnimationFrame(animate);
+  }
+  animate();
 }
-
-
 
 function renderTicker(){
   document.getElementById('tickerStrip').innerHTML=STOCKS.map(s=>{
