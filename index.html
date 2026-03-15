@@ -282,15 +282,20 @@
     display: flex; align-items: center;
     position: relative;
   }
-  #ticker-track {
+  #ticker-wrap:hover .ticker-col { animation-play-state: paused; }
+  .ticker-col {
     display: inline-flex; align-items: center;
-    white-space: nowrap; will-change: transform;
-    animation: ticker-scroll 60s linear infinite;
+    white-space: nowrap; flex-shrink: 0;
+    animation: ticker-move 35s linear infinite;
   }
-  #ticker-wrap:hover #ticker-track { animation-play-state: paused; }
-  @keyframes ticker-scroll {
-    0%   { transform: translateX(0); }
-    100% { transform: translateX(-50%); }
+  .ticker-col-2 {
+    animation: ticker-move 35s linear infinite;
+    animation-delay: -17.5s;
+    position: absolute; left: 0;
+  }
+  @keyframes ticker-move {
+    0%   { transform: translateX(100vw); }
+    100% { transform: translateX(-100%); }
   }
   .ticker-item {
     display: inline-flex; align-items: center; gap: 6px;
@@ -302,8 +307,8 @@
   .ticker-item:hover { background: rgba(255,255,255,0.04); }
   .ticker-name { color: #e0e0f0; font-weight: 700; letter-spacing: 0.05em; }
   .ticker-price { color: #a0a0c0; }
-  .ticker-chg.up  { color: #00e5a0; }
-  .ticker-chg.dn  { color: #ff4d6d; }
+  .ticker-chg.up { color: #00e5a0; }
+  .ticker-chg.dn { color: #ff4d6d; }
   .ticker-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
   .ticker-dot.up { background: #00e5a0; }
   .ticker-dot.dn { background: #ff4d6d; }
@@ -523,14 +528,16 @@ async function loadAll(){
 }
 
 function buildTickerTape(){
-  const track = document.getElementById('ticker-track');
-  if(!track || !Object.keys(prices).length) return;
+  const col1 = document.getElementById('ticker-col-1');
+  const col2 = document.getElementById('ticker-col-2');
+  if(!col1 || !Object.keys(prices).length) return;
+
   const items = STOCKS.map(s => {
     const p = prices[s.t];
     if(!p) return '';
     const up = p.change_pct >= 0;
-    const pct = (up ? '+' : '') + p.change_pct.toFixed(2) + '%';
-    const price = '₹' + p.price.toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2});
+    const pct = (up?'+':'') + p.change_pct.toFixed(2) + '%';
+    const price = '₹' + p.price.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
     return `<div class="ticker-item" onclick="pick('${s.t}')">
       <span class="ticker-dot ${up?'up':'dn'}"></span>
       <span class="ticker-name">${s.t}</span>
@@ -538,9 +545,12 @@ function buildTickerTape(){
       <span class="ticker-chg ${up?'up':'dn'}">${pct}</span>
     </div>`;
   }).join('');
-  // Duplicate for seamless loop
-  track.innerHTML = items + items;
+
+  col1.innerHTML = items;
+  col2.innerHTML = items;
 }
+
+
 
 function renderTicker(){
   document.getElementById('tickerStrip').innerHTML=STOCKS.map(s=>{
