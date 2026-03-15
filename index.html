@@ -280,11 +280,12 @@
     border-bottom: 1px solid #1a1a2a;
     overflow: hidden; height: 32px;
     display: flex; align-items: center;
+    position: relative;
   }
   #ticker-track {
-    display: flex; align-items: center;
-    white-space: nowrap;
-    animation: ticker-scroll 40s linear infinite;
+    display: inline-flex; align-items: center;
+    white-space: nowrap; will-change: transform;
+    animation: ticker-scroll 60s linear infinite;
   }
   #ticker-wrap:hover #ticker-track { animation-play-state: paused; }
   @keyframes ticker-scroll {
@@ -294,7 +295,7 @@
   .ticker-item {
     display: inline-flex; align-items: center; gap: 6px;
     padding: 0 20px; font-family: 'Space Mono', monospace;
-    font-size: 11px; cursor: pointer;
+    font-size: 11px; cursor: pointer; flex-shrink: 0;
     border-right: 1px solid #1a1a2a;
     transition: background 0.15s;
   }
