@@ -71,21 +71,24 @@
 
   .sidebar{display:flex;flex-direction:column;gap:6px;overflow-y:auto;}
   .stock-card{
-    display:flex;flex-direction:column;align-items:center;gap:1px;
-    padding:8px 10px;border-radius:10px;cursor:pointer;
-    background:var(--surface);border:1px solid var(--border);
-    transition:all .15s; min-width:0;
+    padding:12px 16px 10px; border-radius:10px; cursor:pointer;
+    background:var(--surface); border:1px solid var(--border);
+    border-bottom:3px solid transparent;
+    transition:all .15s; position:relative;
+    display:flex; justify-content:space-between; align-items:center;
   }
   .stock-card:hover{background:var(--surface2);}
-  .stock-card.active{background:rgba(0,229,160,.08);border-color:rgba(0,229,160,.35);}
-  .sc-left{width:100%;display:flex;justify-content:space-between;align-items:center;}
-  .sc-right{width:100%;display:flex;justify-content:space-between;align-items:center;}
-  .sc-ticker{font-family:'Space Mono',monospace;font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.8px;}
-  .sc-name{font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-  .sc-price{font-family:'Space Mono',monospace;font-size:12px;font-weight:700;color:#e0e0f0;}
-  .sc-chg{font-family:'Space Mono',monospace;font-size:9px;}
+  .stock-card.active{background:var(--surface2);border-color:var(--border);}
+  .sc-left{display:flex;flex-direction:column;gap:3px;}
+  .sc-right{display:flex;flex-direction:column;align-items:flex-end;gap:3px;}
+  .sc-ticker{font-family:'Space Mono',monospace;font-size:13px;font-weight:700;color:#e0e0f0;letter-spacing:.5px;}
+  .sc-name{font-size:10px;color:var(--muted);}
+  .sc-price{font-family:'Space Mono',monospace;font-size:13px;font-weight:700;color:#e0e0f0;}
+  .sc-chg{font-family:'Space Mono',monospace;font-size:10px;}
   .sc-chg.up{color:#00e5a0;}
   .sc-chg.dn{color:#ff4d6d;}
+  .stock-card.up-card{border-bottom-color:rgba(0,229,160,.5);}
+  .stock-card.dn-card{border-bottom-color:rgba(255,77,109,.5);}
   .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;
     cursor:pointer;transition:all .15s;}
   .card:hover{border-color:rgba(0,229,160,.2);transform:translateX(2px);}
@@ -116,7 +119,7 @@
   .cb.active{background:var(--accent);color:#000;font-weight:700;}
   .sep{width:1px;background:var(--border);margin:2px 4px;}
 
-  #chartbox{width:100%;height:400px;position:relative;}
+  #chartbox{width:100%;height:420px;position:relative;overflow:hidden;}
   .chart-overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;
     justify-content:center;background:var(--surface);z-index:5;gap:12px;}
   .spinner{width:28px;height:28px;border:2px solid var(--border);border-top-color:var(--accent);
@@ -402,7 +405,7 @@
             <button class="cb tool-btn" id="btn-clear" title="Clear All">✕ CLEAR</button>
           </div>
         </div>
-        <div id="chartbox" style="position:relative;">
+        <div id="chartbox">
           <div class="chart-overlay" id="overlay">
             <div class="ov-icon">📈</div>
             <div class="ov-text">Select a stock to view chart</div>
@@ -599,7 +602,7 @@ async function renderChart(){
   }
 
   chart=LightweightCharts.createChart(box,{
-    width:box.clientWidth,height:box.clientHeight||400,
+    width:box.clientWidth||800,height:420,
     layout:{background:{color:'#0f0f18'},textColor:'#5a5a75'},
     grid:{vertLines:{color:'#171724'},horzLines:{color:'#171724'}},
     crosshair:{mode:LightweightCharts.CrosshairMode.Normal},
@@ -1062,15 +1065,16 @@ function renderSidebar(){
     const isActive = s.t === active;
     const up = p && p.change_pct >= 0;
     const priceStr = p ? '₹' + p.price.toLocaleString('en-IN', {minimumFractionDigits:1, maximumFractionDigits:1}) : '—';
-    const chgStr = p ? (up?'+':'') + p.change_pct.toFixed(2) + '%' : '';
-    return `<div class="stock-card${isActive?' active':''}" onclick="pick('${s.t}')">
+    const chgStr = p ? (up?'+':'') + p.change.toFixed(2) + ' (' + (up?'+':'') + p.change_pct.toFixed(2) + '%)' : '';
+    const cardCls = ['stock-card', isActive?'active':'', p?(up?'up-card':'dn-card'):''].filter(Boolean).join(' ');
+    return `<div class="${cardCls}" onclick="pick('${s.t}')">
       <div class="sc-left">
-        <span class="sc-ticker">${s.t}</span>
-        <span class="sc-price">${priceStr}</span>
+        <div class="sc-ticker">${s.t}</div>
+        <div class="sc-name">${s.n}</div>
       </div>
       <div class="sc-right">
-        <span class="sc-name">${s.n}</span>
-        <span class="sc-chg ${p?(up?'up':'dn'):''}">${chgStr}</span>
+        <div class="sc-price">${priceStr}</div>
+        <div class="sc-chg ${p?(up?'up':'dn'):''}">${chgStr}</div>
       </div>
     </div>`;
   }).join('');
