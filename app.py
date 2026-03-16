@@ -375,7 +375,31 @@ def get_stats(ticker):
         return jsonify(result)
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        # NSE failed — fall back to yfinance
+        try:
+            fi = yf.Ticker(yf_sym).fast_info
+            hist = yf.Ticker(yf_sym).history(period="1y")
+            result = {
+                "ticker":      ticker,
+                "market_cap":  fmt_cr(getattr(fi, "market_cap", None)),
+                "pe_ratio":    "—",
+                "eps":         "—",
+                "week52_high": f"₹{fmt_f(getattr(fi, 'year_high', None))}",
+                "week52_low":  f"₹{fmt_f(getattr(fi, 'year_low', None))}",
+                "beta":        "—",
+                "div_yield":   "—",
+                "volume":      fmt_vol(getattr(fi, "three_month_average_volume", None)),
+                "avg_volume":  "—",
+                "sector":      "—",
+                "industry":    "—",
+                "yf_symbol":   yf_sym,
+                "_ts":         _time.time(),
+            }
+            cache[ticker] = result
+            _save_cache(cache)
+            return jsonify(result)
+        except Exception as e2:
+            return jsonify({"error": str(e2)}), 500
 
 import json as _json, os as _os
 
