@@ -26,6 +26,33 @@
   .refresh-btn{background:rgba(0,229,160,.1);border:1px solid rgba(0,229,160,.3);color:var(--accent);
     padding:6px 14px;border-radius:6px;font-family:'Space Mono',monospace;font-size:10px;cursor:pointer;transition:all .2s;}
   .refresh-btn:hover{background:rgba(0,229,160,.2);}
+  /* ── NAV TOGGLE ─────────────────────────────────── */
+  .nav-toggle-wrap{position:relative;}
+  .nav-toggle-btn{
+    background:rgba(255,255,255,.05);border:1px solid var(--border);
+    color:#a0a0c0;padding:6px 12px;border-radius:6px;
+    font-family:'Space Mono',monospace;font-size:11px;
+    cursor:pointer;transition:all .2s;letter-spacing:0.05em;
+  }
+  .nav-toggle-btn:hover{background:rgba(255,255,255,.1);color:#e0e0f0;border-color:rgba(255,255,255,.2);}
+  .nav-toggle-btn.open{background:rgba(255,255,255,.1);color:#e0e0f0;border-color:rgba(255,255,255,.2);}
+  .nav-popup{
+    position:absolute;top:calc(100% + 8px);right:0;
+    display:flex;flex-direction:column;gap:6px;
+    opacity:0;pointer-events:none;transform:translateY(-6px);
+    transition:opacity .2s, transform .2s;z-index:200;
+  }
+  .nav-popup.open{opacity:1;pointer-events:all;transform:translateY(0);}
+  .nav-popup-btn{
+    white-space:nowrap;padding:8px 16px;border-radius:8px;
+    font-family:'Space Mono',monospace;font-size:11px;cursor:pointer;
+    border:1px solid var(--border);transition:all .15s;text-decoration:none;
+    display:flex;align-items:center;gap:8px;
+    background:rgba(15,15,24,.98);backdrop-filter:blur(10px);
+    color:#e0e0f0;
+  }
+  .nav-popup-btn:hover{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.2);}
+  /* ── END NAV TOGGLE ─────────────────────────────── */
   .refresh-btn:disabled{opacity:.4;cursor:not-allowed;}
 
   .api-banner{background:rgba(255,77,109,.08);border:1px solid rgba(255,77,109,.25);border-radius:8px;
@@ -328,6 +355,13 @@
   <div class="header-right">
     <div class="updated" id="ts">—</div>
     <button class="refresh-btn" id="rfbtn" onclick="refreshAll()">↺ REFRESH</button>
+    <div class="nav-toggle-wrap" id="navToggleWrap">
+      <button class="nav-toggle-btn" id="navToggleBtn" onclick="toggleNav()">⊞ PAGES</button>
+      <div class="nav-popup" id="navPopup">
+        <a class="nav-popup-btn" href="news.html">📰 NEWS</a>
+        <a class="nav-popup-btn" href="pomodoro.html">⏱ POMODORO</a>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -463,6 +497,23 @@ const STOCKS=[
   {t:'INDIAVIX',n:'India VIX'},
   {t:'SENSEX',n:'BSE Sensex'},
 ];
+
+// ── NAV TOGGLE ───────────────────────────────────────
+function toggleNav(){
+  const btn  = document.getElementById('navToggleBtn');
+  const popup = document.getElementById('navPopup');
+  const open = popup.classList.toggle('open');
+  btn.classList.toggle('open', open);
+}
+// Close on click outside
+document.addEventListener('click', function(e){
+  const wrap = document.getElementById('navToggleWrap');
+  if(wrap && !wrap.contains(e.target)){
+    document.getElementById('navPopup')?.classList.remove('open');
+    document.getElementById('navToggleBtn')?.classList.remove('open');
+  }
+});
+// ── END NAV TOGGLE ───────────────────────────────────
 
 let prices={},active=null,tf='1D',ct='candlestick',chart=null;
 let indicators={vol:true,ma20:false,ma50:false,ma200:false,rsi:false,macd:false,patterns:false,bb:false,vwap:false,atr:false,stoch:false};
