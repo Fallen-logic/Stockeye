@@ -1017,6 +1017,28 @@ function loadTVFundamentals(ticker){
   }
 }
 
+function renderSidebar(){
+  const sidebar = document.getElementById('sidebarCards');
+  if(!sidebar) return;
+  sidebar.innerHTML = STOCKS.map(s => {
+    const p = prices[s.t];
+    const isActive = s.t === active;
+    const up = p && p.change_pct >= 0;
+    const priceStr = p ? '₹' + p.price.toLocaleString('en-IN', {minimumFractionDigits:1, maximumFractionDigits:1}) : '—';
+    const chgStr = p ? (up?'+':'') + p.change_pct.toFixed(2) + '%' : '';
+    return `<div class="stock-card${isActive?' active':''}" onclick="pick('${s.t}')">
+      <div class="sc-left">
+        <div class="sc-ticker">${s.t}</div>
+        <div class="sc-name">${s.n}</div>
+      </div>
+      <div class="sc-right">
+        <div class="sc-price">${priceStr}</div>
+        <div class="sc-chg ${p?(up?'up':'dn'):''}">${chgStr}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
 async function pick(ticker){active=ticker;renderTicker();renderSidebar();await renderChart();loadTVFundamentals(ticker);await loadAndReplayDrawings();}
 function refreshAll(){loadAll().then(()=>{if(active)renderChart();});}
 
