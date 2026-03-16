@@ -71,19 +71,19 @@
 
   .sidebar{display:flex;flex-direction:column;gap:6px;overflow-y:auto;}
   .stock-card{
-    display:flex;justify-content:space-between;align-items:center;
-    padding:10px 14px;border-radius:10px;cursor:pointer;
+    display:flex;flex-direction:column;align-items:center;gap:1px;
+    padding:8px 10px;border-radius:10px;cursor:pointer;
     background:var(--surface);border:1px solid var(--border);
-    transition:background 0.15s,border-color 0.15s;
+    transition:all .15s; min-width:0;
   }
-  .stock-card:hover{background:var(--surface2);border-color:rgba(255,255,255,0.15);}
-  .stock-card.active{background:rgba(0,229,160,0.08);border-color:rgba(0,229,160,0.35);}
-  .sc-left{display:flex;flex-direction:column;gap:2px;}
-  .sc-right{display:flex;flex-direction:column;align-items:flex-end;gap:2px;}
-  .sc-ticker{font-family:'Space Mono',monospace;font-size:12px;font-weight:700;color:#e0e0f0;}
-  .sc-name{font-size:10px;color:var(--muted);}
-  .sc-price{font-size:13px;color:#e0e0f0;font-weight:600;}
-  .sc-chg{font-size:11px;}
+  .stock-card:hover{background:var(--surface2);}
+  .stock-card.active{background:rgba(0,229,160,.08);border-color:rgba(0,229,160,.35);}
+  .sc-left{width:100%;display:flex;justify-content:space-between;align-items:center;}
+  .sc-right{width:100%;display:flex;justify-content:space-between;align-items:center;}
+  .sc-ticker{font-family:'Space Mono',monospace;font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.8px;}
+  .sc-name{font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .sc-price{font-family:'Space Mono',monospace;font-size:12px;font-weight:700;color:#e0e0f0;}
+  .sc-chg{font-family:'Space Mono',monospace;font-size:9px;}
   .sc-chg.up{color:#00e5a0;}
   .sc-chg.dn{color:#ff4d6d;}
   .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;
@@ -1033,6 +1033,27 @@ function loadTVFundamentals(ticker){
   }
 }
 
+function updateHeader(){
+  const p = prices[active];
+  const s = STOCKS.find(x=>x.t===active);
+  if(!s) return;
+  document.getElementById('ctitle').textContent = active;
+  document.getElementById('cname').textContent = s.n;
+  if(p){
+    const up = p.change_pct >= 0;
+    const priceEl = document.getElementById('cprice');
+    const chgEl   = document.getElementById('cchg');
+    priceEl.textContent = '₹' + p.price.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
+    chgEl.textContent   = (up?'+':'') + p.change.toFixed(2) + ' (' + (up?'+':'') + p.change_pct.toFixed(2) + '%)';
+    chgEl.className = 'big-chg ' + (up?'up':'down');
+    // Update stats row
+    document.getElementById('s-open').textContent = '₹' + p.open.toLocaleString('en-IN',{minimumFractionDigits:1});
+    document.getElementById('s-high').textContent = '₹' + p.high.toLocaleString('en-IN',{minimumFractionDigits:1});
+    document.getElementById('s-low').textContent  = '₹' + p.low.toLocaleString('en-IN',{minimumFractionDigits:1});
+    document.getElementById('s-prev').textContent = '₹' + p.prev.toLocaleString('en-IN',{minimumFractionDigits:1});
+  }
+}
+
 function renderSidebar(){
   const sidebar = document.getElementById('sidebarCards');
   if(!sidebar) return;
@@ -1044,12 +1065,12 @@ function renderSidebar(){
     const chgStr = p ? (up?'+':'') + p.change_pct.toFixed(2) + '%' : '';
     return `<div class="stock-card${isActive?' active':''}" onclick="pick('${s.t}')">
       <div class="sc-left">
-        <div class="sc-ticker">${s.t}</div>
-        <div class="sc-name">${s.n}</div>
+        <span class="sc-ticker">${s.t}</span>
+        <span class="sc-price">${priceStr}</span>
       </div>
       <div class="sc-right">
-        <div class="sc-price">${priceStr}</div>
-        <div class="sc-chg ${p?(up?'up':'dn'):''}">${chgStr}</div>
+        <span class="sc-name">${s.n}</span>
+        <span class="sc-chg ${p?(up?'up':'dn'):''}">${chgStr}</span>
       </div>
     </div>`;
   }).join('');
