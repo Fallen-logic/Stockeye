@@ -784,6 +784,7 @@ import threading
 def _alert_checker_loop():
     """Check price alerts every 30 seconds in background."""
     import time
+    time.sleep(15)  # wait for server to fully start
     while True:
         try:
             results = {}
@@ -843,22 +844,24 @@ def scrape_ipos():
                 items = items.get("data", items.get("ipos", []))
             for item in items:
                 try:
-                    name = item.get("companyName") or item.get("name") or item.get("company", "")
+                    # ipoalerts.in field names
+                    name = item.get("name") or item.get("companyName") or item.get("company", "")
                     if not name or name in seen: continue
                     seen.add(name)
-                    open_date  = parse_date(item.get("openDate") or item.get("open_date") or item.get("startDate"))
-                    close_date = parse_date(item.get("closeDate") or item.get("close_date") or item.get("endDate"))
-                    price_str  = str(item.get("priceBand") or item.get("price_band") or item.get("issuePrice") or "")
-                    prices = re.findall(r"\d+", price_str.replace(",", ""))
+                    open_date  = parse_date(item.get("startDate") or item.get("openDate") or item.get("open_date"))
+                    close_date = parse_date(item.get("endDate") or item.get("closeDate") or item.get("close_date"))
+                    price_str  = str(item.get("priceRange") or item.get("priceBand") or item.get("issuePrice") or "")
+                    import re as _re
+                    prices = _re.findall(r"\d+", price_str.replace(",", ""))
                     price = int(prices[-1]) if prices else None
                     lot_str = str(item.get("lotSize") or item.get("lot_size") or item.get("marketLot") or "")
-                    lots = re.findall(r"\d+", lot_str)
+                    lots = _re.findall(r"\d+", lot_str)
                     lot = int(lots[0]) if lots else None
-                    exc_raw = str(item.get("exchange") or item.get("listingAt") or item.get("listing_at") or "NSE + BSE")
+                    exc_raw = str(item.get("source") or item.get("exchange") or item.get("listingAt") or "NSE + BSE")
                     exc = "NSE + BSE"
-                    if "NSE" in exc_raw.upper() and "BSE" not in exc_raw.upper(): exc = "NSE"
-                    elif "BSE" in exc_raw.upper() and "NSE" not in exc_raw.upper(): exc = "BSE"
-                    gmp = str(item.get("gmp") or item.get("greyMarketPremium") or item.get("grey_market_premium") or "")
+                    if exc_raw.lower() == "nse": exc = "NSE"
+                    elif exc_raw.lower() == "bse": exc = "BSE"
+                    gmp = str(item.get("gmp") or item.get("greyMarketPremium") or "")
                     ipos.append({
                         "name": name, "open_date": open_date, "close_date": close_date,
                         "price": price, "lot": lot, "exchange": exc,
@@ -979,37 +982,49 @@ def ipo_sync():
 
 @app.route("/ipo/debug")
 def ipo_debug():
-    """Debug: show raw ipoalerts API response."""
+    """Debug: test Chittorgarh and ipowatch scraping from Render."""
+    results = {}
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+    }
+    # Test Chittorgarh
     try:
-        IPOALERTS_KEY = os.environ.get("IPOALERTS_KEY")
-        headers = {"Authorization": f"Bearer {IPOALERTS_KEY}", "Accept": "application/json"}
-        results = {}
-        for status in ["open", "upcoming", "announced", "closed"]:
-            try:
-                r = req.get(f"https://api.ipoalerts.in/ipos?status={status}", headers=headers, timeout=15)
-                results[status] = {
-                    "http_status": r.status_code,
-                    "raw": r.text[:1000]
-                }
-            except Exception as e:
-                results[status] = {"error": str(e)}
-        return jsonify(results)
+        r = req.get("https://www.chittorgarh.com/report/ipo_list_india_mainboard_sme/8/", headers=headers, timeout=15)
+        from bs4 import BeautifulSoup
+        soup = BeautifulSoup(r.text, "html.parser")
+        table = soup.find("table")
+        rows = table.find_all("tr") if table else []
+        results["chittorgarh"] = {
+            "status": r.status_code,
+            "table_found": table is not None,
+            "rows": len(rows),
+            "sample_row": rows[1].get_text(strip=True)[:300] if len(rows) > 1 else None
+        }
     except Exception as e:
-        return jsonify({"error": str(e)})
+        results["chittorgarh"] = {"error": str(e)}
 
-def _ipo_sync_loop():
-    """Sync IPOs to Notion once a day."""
-    import time
-    while True:
-        try:
-            sync_ipos_to_notion()
-            print("IPO sync complete")
-        except Exception as e:
-            print(f"IPO sync loop error: {e}")
-        time.sleep(24 * 60 * 60)  # once per day
+    # Test ipowatch
+    try:
+        r2 = req.get("https://ipowatch.in/ipo-grey-market-premium-latest-ipo-gmp/", headers=headers, timeout=15)
+        from bs4 import BeautifulSoup
+        soup2 = BeautifulSoup(r2.text, "html.parser")
+        table2 = soup2.find("table")
+        rows2 = table2.find_all("tr") if table2 else []
+        results["ipowatch"] = {
+            "status": r2.status_code,
+            "table_found": table2 is not None,
+            "rows": len(rows2),
+            "sample_row": rows2[1].get_text(strip=True)[:300] if len(rows2) > 1 else None
+        }
+    except Exception as e:
+        results["ipowatch"] = {"error": str(e)}
 
-_ipo_thread = threading.Thread(target=_ipo_sync_loop, daemon=True)
-_ipo_thread.start()
+    return jsonify(results)
+
+# IPO auto-sync disabled — use /ipo/sync endpoint manually
+# (background thread was causing worker timeouts on startup)
 # ── END IPO AUTO UPDATER ─────────────────────────────────────────
 
 
