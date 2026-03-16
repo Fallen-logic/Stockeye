@@ -30,6 +30,54 @@ TIMEFRAME_MAP = {
     "1Y": {"period": "1y",  "interval": "1wk"},
 }
 
+
+import time as _time
+import json as _json_cache
+import os as _os_cache
+
+# ── NSE SESSION & MAPS ──────────────────────────────────────────
+NSE_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer": "https://www.nseindia.com/",
+}
+
+NSE_MAP = {
+    "TCS": "TCS", "SBI": "SBIN", "HDFC": "HDFCBANK", "ICICI": "ICICIBANK",
+    "TITAN": "TITAN", "INFOSYS": "INFY", "CIPLA": "CIPLA",
+    "ULTRATECH": "ULTRACEMCO", "RELIANCE": "RELIANCE",
+}
+
+NSE_INDEX_MAP = {
+    "NIFTY": "NIFTY 50", "BANKNIFTY": "NIFTY BANK",
+    "INDIAVIX": "India VIX",
+}
+
+def get_nse_session():
+    import requests as _req
+    s = _req.Session()
+    s.get("https://www.nseindia.com", headers=NSE_HEADERS, timeout=10)
+    return s
+
+# ── STATS CACHE ─────────────────────────────────────────────────
+CACHE_FILE = '/tmp/stats_cache.json'
+
+def _load_cache():
+    try:
+        if _os_cache.path.exists(CACHE_FILE):
+            with open(CACHE_FILE) as f:
+                return _json_cache.load(f)
+    except: pass
+    return {}
+
+def _save_cache(data):
+    try:
+        with open(CACHE_FILE, 'w') as f:
+            _json_cache.dump(data, f)
+    except: pass
+# ── END NSE/CACHE SETUP ─────────────────────────────────────────
+
 @app.route("/")
 def index():
     return jsonify({"status": "StockEye API is running!"})
@@ -80,11 +128,9 @@ def get_all_quotes():
             }
         except:
             pass
-    # Check price alerts on every quotes refresh
-    try:
-        check_and_trigger_alerts(results)
-    except:
-        pass
+    # Update shared prices cache for alert checker
+    global _latest_prices
+    _latest_prices = results
     return jsonify(results)
 
 @app.route("/chart/<ticker>")
@@ -781,23 +827,17 @@ def create_alert():
 # ── BACKGROUND ALERT CHECKER ─────────────────────────────────────
 import threading
 
+# Shared prices cache for alert checker
+_latest_prices = {}
+
 def _alert_checker_loop():
-    """Check price alerts every 30 seconds in background."""
+    """Check price alerts every 30 seconds using cached prices."""
     import time
-    time.sleep(15)  # wait for server to fully start
+    time.sleep(45)  # wait for server to fully start
     while True:
         try:
-            results = {}
-            for ticker, yf_sym in TICKER_MAP.items():
-                try:
-                    import yfinance as _yf
-                    hist = _yf.Ticker(yf_sym).history(period="1d")
-                    if not hist.empty:
-                        results[ticker] = {"price": round(float(hist["Close"].iloc[-1]), 2)}
-                except:
-                    pass
-            if results:
-                check_and_trigger_alerts(results)
+            if _latest_prices:
+                check_and_trigger_alerts(_latest_prices)
         except Exception as e:
             print(f"Alert checker error: {e}")
         time.sleep(30)
