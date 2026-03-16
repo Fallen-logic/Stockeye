@@ -505,7 +505,7 @@ async function loadAll(){
     warmup.done();
     document.getElementById('apiBanner').classList.add('show');
   }
-  renderTicker();renderSidebar();
+  buildTickerTape();renderSidebar();
   document.getElementById('ts').textContent='Updated '+new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})+' IST';
   btn.disabled=false;btn.textContent='↺ REFRESH';
   if(active)updateHeader();
@@ -552,8 +552,7 @@ function buildTickerTape(){
 }
 
 function renderTicker(){
-  // tickerStrip removed
-  container.appendChild(script);
+  // tickerStrip removed — ticker tape handled by buildTickerTape()
 }
 
 
@@ -942,6 +941,7 @@ async function renderChart(){
     const atrSeries=atrChart.addLineSeries({color:'#f97316',lineWidth:1.5,priceLineVisible:false,lastValueVisible:true});
     atrSeries.setData(atrArr);
     atrChart.timeScale().setVisibleRange({from:atrArr[0]?.time,to:atrArr[atrArr.length-1]?.time});
+    new ResizeObserver(()=>{if(atrChart)atrChart.applyOptions({width:atrBox.clientWidth});}).observe(atrBox);
   } else { atrBox.style.display='none'; } } catch(e){ console.warn('ATR error',e); }
 
   // ── STOCHASTIC (separate pane) ─────────────────────────────────
@@ -984,11 +984,41 @@ async function renderChart(){
     kSeries.setData(kData);
     dSeries.setData(dData);
     stochChart.timeScale().setVisibleRange({from:kData[0]?.time,to:kData[kData.length-1]?.time});
+    new ResizeObserver(()=>{if(stochChart)stochChart.applyOptions({width:stochBox.clientWidth});}).observe(stochBox);
   } else { stochBox.style.display='none'; } } catch(e){ console.warn('Stoch error',e); }
 }
 
+// Yahoo Finance & TradingView symbol maps
+const YF_MAP = {
+  TCS:'TCS.NS', SBI:'SBIN.NS', HDFC:'HDFCBANK.NS', ICICI:'ICICIBANK.NS',
+  TITAN:'TITAN.NS', INFOSYS:'INFY.NS', CIPLA:'CIPLA.NS', ULTRATECH:'ULTRACEMCO.NS',
+  RELIANCE:'RELIANCE.NS', NIFTY:'^NSEI', BANKNIFTY:'^NSEBANK',
+  INDIAVIX:'^INDIAVIX', SENSEX:'^BSESN'
+};
+const TV_MAP = {
+  TCS:'NSE:TCS', SBI:'NSE:SBIN', HDFC:'NSE:HDFCBANK', ICICI:'NSE:ICICIBANK',
+  TITAN:'NSE:TITAN', INFOSYS:'NSE:INFY', CIPLA:'NSE:CIPLA', ULTRATECH:'NSE:ULTRACEMCO',
+  RELIANCE:'NSE:RELIANCE', NIFTY:'NSE:NIFTY', BANKNIFTY:'NSE:BANKNIFTY',
+  INDIAVIX:'NSE:INDIAVIX', SENSEX:'BSE:SENSEX'
+};
+const INDEXES = ['NIFTY','BANKNIFTY','INDIAVIX','SENSEX'];
+
+function loadTVFundamentals(ticker){
+  const yfLink = document.getElementById('yf-link');
+  const scLink = document.getElementById('sc-link');
+  if(yfLink) yfLink.href = 'https://finance.yahoo.com/quote/' + (YF_MAP[ticker] || ticker);
+  if(scLink){
+    const tvSym = TV_MAP[ticker] || ('NSE:' + ticker);
+    if(INDEXES.includes(ticker)){
+      scLink.href = 'https://in.tradingview.com/chart/?symbol=' + tvSym;
+    } else {
+      scLink.href = 'https://in.tradingview.com/symbols/' + tvSym.replace(':','-') + '/financials-overview/';
+    }
+  }
+}
+
 async function pick(ticker){active=ticker;renderTicker();renderSidebar();await renderChart();loadTVFundamentals(ticker);await loadAndReplayDrawings();}
-function refreshAll(){loadAll().then(()=>{if(active)renderChart(); buildTickerTape();});}
+function refreshAll(){loadAll().then(()=>{if(active)renderChart();});}
 
 let _renderDebounce = null;
 function debouncedRender(){ 
@@ -1018,7 +1048,7 @@ document.getElementById('ctGrp').addEventListener('click',async e=>{
   if(active)await renderChart();
 });
 
-loadAll().then(()=>{ pick('NIFTY'); buildTickerTape(); });
+loadAll().then(()=>{ pick('NIFTY'); });
 setInterval(loadAll,5*60*1000);
 
 // ── TOOLS ────────────────────────────────────────────────────────
