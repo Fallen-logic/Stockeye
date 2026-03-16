@@ -1026,14 +1026,32 @@ function loadTVFundamentals(ticker){
   const yfLink = document.getElementById('yf-link');
   const scLink = document.getElementById('sc-link');
   if(yfLink) yfLink.href = 'https://finance.yahoo.com/quote/' + (YF_MAP[ticker] || ticker);
+  const tvSym = TV_MAP[ticker] || ('NSE:' + ticker);
   if(scLink){
-    const tvSym = TV_MAP[ticker] || ('NSE:' + ticker);
     if(INDEXES.includes(ticker)){
       scLink.href = 'https://in.tradingview.com/chart/?symbol=' + tvSym;
     } else {
       scLink.href = 'https://in.tradingview.com/symbols/' + tvSym.replace(':','-') + '/financials-overview/';
     }
   }
+  // Inject TradingView fundamentals widget
+  const container = document.getElementById('tv-fundamentals');
+  if(!container) return;
+  container.innerHTML = '';
+  const script = document.createElement('script');
+  script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-financials.js';
+  script.async = true;
+  script.innerHTML = JSON.stringify({
+    symbol: tvSym,
+    colorTheme: 'dark',
+    isTransparent: true,
+    largeChartUrl: '',
+    displayMode: 'compact',
+    width: '100%',
+    height: '220',
+    locale: 'en'
+  });
+  container.appendChild(script);
 }
 
 function updateHeader(){
