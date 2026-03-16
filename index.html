@@ -69,7 +69,23 @@
   .layout{display:grid;grid-template-columns:300px 1fr;gap:24px;}
   @media(max-width:900px){.layout{grid-template-columns:1fr;}}
 
-  .sidebar{display:flex;flex-direction:column;gap:10px;}
+  .sidebar{display:flex;flex-direction:column;gap:6px;overflow-y:auto;}
+  .stock-card{
+    display:flex;justify-content:space-between;align-items:center;
+    padding:10px 14px;border-radius:10px;cursor:pointer;
+    background:var(--surface);border:1px solid var(--border);
+    transition:background 0.15s,border-color 0.15s;
+  }
+  .stock-card:hover{background:var(--surface2);border-color:rgba(255,255,255,0.15);}
+  .stock-card.active{background:rgba(0,229,160,0.08);border-color:rgba(0,229,160,0.35);}
+  .sc-left{display:flex;flex-direction:column;gap:2px;}
+  .sc-right{display:flex;flex-direction:column;align-items:flex-end;gap:2px;}
+  .sc-ticker{font-family:'Space Mono',monospace;font-size:12px;font-weight:700;color:#e0e0f0;}
+  .sc-name{font-size:10px;color:var(--muted);}
+  .sc-price{font-size:13px;color:#e0e0f0;font-weight:600;}
+  .sc-chg{font-size:11px;}
+  .sc-chg.up{color:#00e5a0;}
+  .sc-chg.dn{color:#ff4d6d;}
   .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;
     cursor:pointer;transition:all .15s;}
   .card:hover{border-color:rgba(0,229,160,.2);transform:translateX(2px);}
@@ -1070,7 +1086,7 @@ document.getElementById('ctGrp').addEventListener('click',async e=>{
   if(active)await renderChart();
 });
 
-loadAll().then(()=>{ pick('NIFTY'); });
+loadAll().then(()=>{ if(prices['NIFTY']) pick('NIFTY'); else pick(STOCKS[0].t); });
 setInterval(loadAll,5*60*1000);
 
 // ── TOOLS ────────────────────────────────────────────────────────
